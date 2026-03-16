@@ -49,6 +49,17 @@ La view ricostruisce la forma "simile a Excel" con:
 3. Esegui `supabase/seed.sql`.
 4. Fine: l'app puo leggere e scrivere senza autenticazione.
 
+Se hai gia un database attivo creato con la vecchia constraint `retailers.name unique`, esegui prima:
+
+`supabase/owner_unique_migration.sql`
+
+Questa migrazione:
+
+- aggiunge `owner` se manca
+- valorizza gli owner vuoti con `default`
+- rimuove il vincolo globale su `name`
+- rende unica la coppia `(owner, name)`
+
 ## Avvio locale
 
 ```bash

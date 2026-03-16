@@ -1,16 +1,20 @@
-const APP_VERSION = "20260316-23";
-const TABLE_COLUMN_COUNT = 5;
+const APP_VERSION = "20260316-39";
+const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
+const ALPHABET_INDEX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 window.__listinoVersion = APP_VERSION;
 
 const state = {
   ownerOptions: [],
   currentOwner: "",
+  ownerDropdownOpen: false,
+  ownerSearchTerm: "",
   rivenditores: [],
   rows: [],
   filteredProducts: [],
   selectedRivenditoreByProduct: {},
+  checkedProducts: {},
   editingRowId: null,
   formRivenditoreId: "",
   rivenditoreDropdownOpen: false,
@@ -23,9 +27,18 @@ const state = {
 
 let feedbackHideTimeoutId = null;
 let feedbackAnimationFrameId = null;
+let alphabetHighlightTimeoutId = null;
+let loadingRequestCount = 0;
 
 const elements = {
-  ownerSelect: document.querySelector("#owner-select"),
+  loadingOverlay: document.querySelector("#loading-overlay"),
+  loadingOverlayLabel: document.querySelector("#loading-overlay-label"),
+  ownerDropdown: document.querySelector("#owner-dropdown"),
+  ownerDropdownButton: document.querySelector("#owner-dropdown-button"),
+  ownerDropdownLabel: document.querySelector("#owner-dropdown-label"),
+  ownerDropdownPanel: document.querySelector("#owner-dropdown-panel"),
+  ownerDropdownSearch: document.querySelector("#owner-dropdown-search"),
+  ownerDropdownOptions: document.querySelector("#owner-dropdown-options"),
   ownerStatus: document.querySelector("#owner-status"),
   refreshButton: document.querySelector("#refresh-button"),
   priceForm: document.querySelector("#price-form"),
@@ -34,6 +47,7 @@ const elements = {
   priceFormNote: document.querySelector("#price-form-note"),
   advancedToggleButton: document.querySelector("#advanced-toggle-button"),
   advancedFilters: document.querySelector("#advanced-filters"),
+  alphabetIndex: document.querySelector("#alphabet-index"),
   rivenditoreFilter: document.querySelector("#rivenditore-filter"),
   categoryFilter: document.querySelector("#category-filter"),
   searchInput: document.querySelector("#search-input"),
@@ -54,11 +68,37 @@ const elements = {
   entryRow: document.querySelector("#entry-row"),
   rowsBody: document.querySelector("#rows-body"),
   tableCounter: document.querySelector("#table-counter"),
-  feedback: document.querySelector("#feedback")
+  listinoPanel: document.querySelector("#listino-panel"),
+  feedback: document.querySelector("#feedback"),
+  selectedRowsBox: document.querySelector("#selected-rows-box"),
+  selectedRowsCount: document.querySelector("#selected-rows-count"),
+  selectedRowsList: document.querySelector("#selected-rows-list"),
+  selectedRowsCopyButton: document.querySelector("#selected-rows-copy-button")
 };
 
 if (elements.rowsBody) {
   elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Inizializzazione frontend...</td></tr>`;
+}
+
+function showLoadingOverlay(message = "Caricamento...") {
+  loadingRequestCount += 1;
+  if (elements.loadingOverlayLabel) {
+    elements.loadingOverlayLabel.textContent = message;
+  }
+  elements.loadingOverlay?.classList.remove("hidden");
+  elements.loadingOverlay?.setAttribute("aria-hidden", "false");
+  document.body.classList.add("loading-active");
+}
+
+function hideLoadingOverlay() {
+  loadingRequestCount = Math.max(loadingRequestCount - 1, 0);
+  if (loadingRequestCount > 0) {
+    return;
+  }
+
+  elements.loadingOverlay?.classList.add("hidden");
+  elements.loadingOverlay?.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("loading-active");
 }
 
 function showFatal(message) {
@@ -173,8 +213,21 @@ function normalizeOwnerValue(value) {
   return String(value || "").trim();
 }
 
+function normalizeAlphabetSource(value) {
+  return String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function normalizeOwnerKey(value) {
   return normalizeOwnerValue(value).toLowerCase();
+}
+
+function getProductAlphabetLetter(value) {
+  const normalized = normalizeAlphabetSource(value);
+  const firstCharacter = normalized.charAt(0).toUpperCase();
+  return /^[A-Z]$/.test(firstCharacter) ? firstCharacter : "#";
 }
 
 function getCachedOwner() {
@@ -227,8 +280,20 @@ function findCanonicalOwner(owner) {
   return state.ownerOptions.find((option) => normalizeOwnerKey(option) === ownerKey) || "";
 }
 
-function isKnownOwner(owner) {
-  return Boolean(findCanonicalOwner(owner));
+function ensureOwnerOption(owner) {
+  const normalizedOwner = normalizeOwnerValue(owner);
+  if (!normalizedOwner) {
+    return "";
+  }
+
+  const existingOwner = findCanonicalOwner(normalizedOwner);
+  if (existingOwner) {
+    return existingOwner;
+  }
+
+  state.ownerOptions = [...state.ownerOptions, normalizedOwner]
+    .sort((a, b) => a.localeCompare(b, "it"));
+  return normalizedOwner;
 }
 
 function normalizeRivenditoreName(value) {
@@ -244,6 +309,21 @@ function findRivenditoreByName(name) {
   return state.rivenditores.find((rivenditore) => normalizeRivenditoreName(rivenditore.name) === normalizedName) || null;
 }
 
+async function findRivenditoreByOwnerAndName(owner, name) {
+  const { data, error } = await supabaseClient
+    .from("retailers")
+    .select("id, name, owner")
+    .eq("owner", owner)
+    .eq("name", name)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
 function buildCategoryList() {
   return [...new Set(
     state.rows
@@ -251,6 +331,13 @@ function buildCategoryList() {
       .filter(Boolean)
       .map((value) => String(value).trim())
   )].sort((a, b) => a.localeCompare(b, "it"));
+}
+
+function syncCheckedProducts() {
+  const availableProducts = new Set(state.rows.map((row) => row.prodotto).filter(Boolean));
+  state.checkedProducts = Object.fromEntries(
+    Object.entries(state.checkedProducts).filter(([product, checked]) => checked && availableProducts.has(product))
+  );
 }
 
 function setFormNote(message) {
@@ -263,26 +350,84 @@ function setOwnerStatus(message, type = "neutral") {
   if (!elements.ownerStatus) {
     return;
   }
-  elements.ownerStatus.textContent = message;
+  const normalizedMessage = String(message || "").trim();
+  if (!normalizedMessage) {
+    elements.ownerStatus.textContent = "";
+    elements.ownerStatus.className = "field-help owner-inline-status hidden";
+    return;
+  }
+
+  elements.ownerStatus.textContent = normalizedMessage;
   elements.ownerStatus.className = `field-help owner-inline-status owner-status-${type}`;
 }
 
 function renderOwnerSelect() {
-  if (!elements.ownerSelect) {
+  if (!elements.ownerDropdownLabel || !elements.ownerDropdownSearch || !elements.ownerDropdownOptions) {
     return;
   }
 
-  const currentValue = findCanonicalOwner(elements.ownerSelect.value)
-    || findCanonicalOwner(state.currentOwner)
-    || findCanonicalOwner(getCachedOwner());
+  const searchTerm = state.ownerSearchTerm.toLowerCase();
+  const filteredOwners = state.ownerOptions.filter((owner) => owner.toLowerCase().includes(searchTerm));
+  const exactOwner = findCanonicalOwner(state.ownerSearchTerm);
 
-  elements.ownerSelect.innerHTML = [
-    `<option value="">Seleziona owner</option>`,
-    ...state.ownerOptions.map((owner) => `<option value="${escapeHtml(owner)}">${escapeHtml(owner)}</option>`)
-  ].join("");
+  elements.ownerDropdownSearch.value = state.ownerSearchTerm;
 
-  setSelectValue(elements.ownerSelect, currentValue);
-  elements.ownerSelect.disabled = !state.ownerOptions.length;
+  if (state.currentOwner) {
+    elements.ownerDropdownLabel.textContent = state.currentOwner;
+  } else if (state.ownerSearchTerm && !exactOwner && !filteredOwners.length) {
+    elements.ownerDropdownLabel.textContent = `Nuovo owner: ${state.ownerSearchTerm}`;
+  } else {
+    elements.ownerDropdownLabel.textContent = "Seleziona o crea owner";
+  }
+
+  const options = filteredOwners.map((owner) => {
+    const isActive = normalizeOwnerKey(owner) === normalizeOwnerKey(state.currentOwner);
+    return `
+      <button
+        type="button"
+        class="custom-dropdown-option ${isActive ? "custom-dropdown-option-active" : ""}"
+        data-owner-value="${escapeHtml(owner)}"
+        role="option"
+        aria-selected="${isActive ? "true" : "false"}"
+      >
+        ${escapeHtml(owner)}
+      </button>
+    `;
+  });
+
+  if (state.ownerSearchTerm && !exactOwner) {
+    options.unshift(`
+      <button
+        type="button"
+        class="custom-dropdown-option"
+        data-owner-value="${escapeHtml(state.ownerSearchTerm)}"
+        data-owner-new="true"
+        role="option"
+        aria-selected="false"
+      >
+        Usa nuovo owner: ${escapeHtml(state.ownerSearchTerm)}
+      </button>
+    `);
+  }
+
+  elements.ownerDropdownOptions.innerHTML = options.length
+    ? options.join("")
+    : `<div class="custom-dropdown-empty">Nessun owner presente. Digita un nome per crearne uno.</div>`;
+}
+
+function closeOwnerDropdown() {
+  state.ownerDropdownOpen = false;
+  elements.ownerDropdownButton?.setAttribute("aria-expanded", "false");
+  elements.ownerDropdownPanel?.classList.add("hidden");
+}
+
+function openOwnerDropdown() {
+  closeRivenditoreDropdown();
+  closeCategoryDropdown();
+  state.ownerDropdownOpen = true;
+  elements.ownerDropdownButton?.setAttribute("aria-expanded", "true");
+  elements.ownerDropdownPanel?.classList.remove("hidden");
+  elements.ownerDropdownSearch?.focus();
 }
 
 function renderAdvancedFilters() {
@@ -295,16 +440,87 @@ function renderAdvancedFilters() {
   elements.advancedToggleButton.classList.toggle("advanced-toggle-button-active", state.advancedFiltersOpen);
 }
 
+function renderAlphabetIndex() {
+  if (!elements.alphabetIndex) {
+    return;
+  }
+
+  const availableLetters = new Set(
+    state.filteredProducts
+      .map((group) => getProductAlphabetLetter(group.product))
+      .filter((letter) => letter !== "#")
+  );
+
+  elements.alphabetIndex.innerHTML = ALPHABET_INDEX_LETTERS.map((letter) => {
+    const isAvailable = availableLetters.has(letter);
+    return `
+      <button
+        type="button"
+        class="alphabet-index-button ${isAvailable ? "" : "alphabet-index-button-disabled"}"
+        data-letter="${letter}"
+        ${isAvailable ? "" : "disabled"}
+        aria-label="Vai ai prodotti che iniziano con ${letter}"
+        title="${isAvailable ? `Vai alla ${letter}` : `Nessun prodotto con ${letter}`}"
+      >
+        ${letter}
+      </button>
+    `;
+  }).join("");
+}
+
+function highlightAlphabetTarget(row) {
+  if (!(row instanceof HTMLElement)) {
+    return;
+  }
+
+  if (alphabetHighlightTimeoutId !== null) {
+    window.clearTimeout(alphabetHighlightTimeoutId);
+    alphabetHighlightTimeoutId = null;
+  }
+
+  elements.rowsBody?.querySelectorAll(".alphabet-jump-target").forEach((element) => {
+    element.classList.remove("alphabet-jump-target");
+  });
+
+  row.classList.add("alphabet-jump-target");
+  alphabetHighlightTimeoutId = window.setTimeout(() => {
+    row.classList.remove("alphabet-jump-target");
+    alphabetHighlightTimeoutId = null;
+  }, 1800);
+}
+
+function scrollToAlphabetLetter(letter) {
+  const targetLetter = String(letter || "").toUpperCase();
+  if (!targetLetter) {
+    return;
+  }
+
+  const targetRow = [...(elements.rowsBody?.querySelectorAll("tr[data-alpha-letter]") || [])]
+    .find((row) => row.getAttribute("data-alpha-letter") === targetLetter);
+
+  if (!targetRow) {
+    return;
+  }
+
+  highlightAlphabetTarget(targetRow);
+  targetRow.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function clearCurrentOwner() {
   state.currentOwner = "";
+  state.ownerSearchTerm = "";
   cacheOwner("");
   state.rivenditores = [];
   state.rows = [];
   state.filteredProducts = [];
   state.selectedRivenditoreByProduct = {};
+  state.checkedProducts = {};
   setPriceFormMode("create");
   renderRivenditoreControls();
   renderCategoryOptions();
+  renderOwnerSelect();
+  renderAlphabetIndex();
+  renderSelectedRowsBox();
   showTableMessage("Seleziona un owner per caricare il listino.");
   if (elements.tableCounter) {
     elements.tableCounter.textContent = "owner richiesto";
@@ -352,6 +568,7 @@ function closeRivenditoreDropdown() {
 }
 
 function openRivenditoreDropdown() {
+  closeOwnerDropdown();
   closeCategoryDropdown();
   state.rivenditoreDropdownOpen = true;
   elements.rivenditoreDropdownButton.setAttribute("aria-expanded", "true");
@@ -444,6 +661,7 @@ function closeCategoryDropdown() {
 }
 
 function openCategoryDropdown() {
+  closeOwnerDropdown();
   closeRivenditoreDropdown();
   state.categoryDropdownOpen = true;
   elements.categoryDropdownButton.setAttribute("aria-expanded", "true");
@@ -583,6 +801,105 @@ function buildProductGroups() {
     .sort((a, b) => a.product.localeCompare(b.product, "it"));
 }
 
+function getSelectedProductSummaries() {
+  const productGroups = buildProductGroups();
+  const groupMap = new Map(productGroups.map((group) => [group.product, group]));
+
+  return Object.keys(state.checkedProducts)
+    .filter((product) => state.checkedProducts[product])
+    .sort((a, b) => a.localeCompare(b, "it"))
+    .map((product) => {
+      const group = groupMap.get(product);
+      if (!group || !group.selectedRow) {
+        return null;
+      }
+
+      return {
+        product,
+        row: group.selectedRow
+      };
+    })
+    .filter(Boolean);
+}
+
+function buildSelectedRowsClipboardText(selectedItems = getSelectedProductSummaries()) {
+  return selectedItems
+    .map(({ product, row }) => `${product} | ${row.rivenditore_name || "-"} | ${row.prezzo || "-"}`)
+    .join("\n");
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const tempTextArea = document.createElement("textarea");
+  tempTextArea.value = text;
+  tempTextArea.setAttribute("readonly", "");
+  tempTextArea.style.position = "fixed";
+  tempTextArea.style.opacity = "0";
+  document.body.appendChild(tempTextArea);
+  tempTextArea.select();
+
+  try {
+    const copied = document.execCommand("copy");
+    if (!copied) {
+      throw new Error("Il browser non ha completato la copia.");
+    }
+  } finally {
+    document.body.removeChild(tempTextArea);
+  }
+}
+
+function renderSelectedRowsBox() {
+  if (!elements.selectedRowsBox || !elements.selectedRowsCount || !elements.selectedRowsList || !elements.selectedRowsCopyButton) {
+    return;
+  }
+
+  const selectedItems = getSelectedProductSummaries();
+  const anchorBefore = elements.listinoPanel?.getBoundingClientRect().top ?? null;
+  const wasHidden = elements.selectedRowsBox.classList.contains("hidden");
+  if (!selectedItems.length) {
+    if (!wasHidden) {
+      elements.selectedRowsBox.classList.add("hidden");
+    }
+    elements.selectedRowsCount.textContent = "0 selezionati";
+    elements.selectedRowsList.textContent = "";
+    elements.selectedRowsCopyButton.disabled = true;
+    if (!wasHidden && anchorBefore !== null) {
+      const anchorAfter = elements.listinoPanel?.getBoundingClientRect().top ?? anchorBefore;
+      window.scrollBy(0, anchorAfter - anchorBefore);
+    }
+    return;
+  }
+
+  elements.selectedRowsCount.textContent = `${selectedItems.length} selezionat${selectedItems.length === 1 ? "o" : "i"}`;
+  elements.selectedRowsList.textContent = buildSelectedRowsClipboardText(selectedItems);
+  elements.selectedRowsCopyButton.disabled = false;
+  if (wasHidden) {
+    elements.selectedRowsBox.classList.remove("hidden");
+    if (anchorBefore !== null) {
+      const anchorAfter = elements.listinoPanel?.getBoundingClientRect().top ?? anchorBefore;
+      window.scrollBy(0, anchorAfter - anchorBefore);
+    }
+  }
+}
+
+async function handleSelectedRowsCopy() {
+  const selectedItems = getSelectedProductSummaries();
+  if (!selectedItems.length) {
+    return;
+  }
+
+  try {
+    await copyTextToClipboard(buildSelectedRowsClipboardText(selectedItems));
+    showFeedback("Selezionati copiati.");
+  } catch (error) {
+    showFeedback(`Copia fallita: ${error.message}`, "error");
+  }
+}
+
 function applyFilters() {
   const search = elements.searchInput.value.trim().toLowerCase();
   const rivenditoreId = elements.rivenditoreFilter.value;
@@ -615,11 +932,15 @@ function renderRows() {
   if (!state.filteredProducts.length) {
     elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Nessuna riga trovata.</td></tr>`;
     elements.tableCounter.textContent = "0 prodotti";
+    renderAlphabetIndex();
+    renderSelectedRowsBox();
     return;
   }
 
   elements.rowsBody.innerHTML = state.filteredProducts.map((group) => {
     const row = group.selectedRow;
+    const isChecked = Boolean(state.checkedProducts[group.product]);
+    const alphaLetter = getProductAlphabetLetter(group.product);
     const rivenditoreOptions = group.rows.map((optionRow) => `
       <option value="${optionRow.retailer_id}" ${String(optionRow.retailer_id) === group.selectedRivenditoreId ? "selected" : ""}>
         ${escapeHtml(optionRow.rivenditore_name)}
@@ -627,16 +948,25 @@ function renderRows() {
     `).join("");
 
     return `
-      <tr>
-        <td>${escapeHtml(group.product)}</td>
-        <td>
+      <tr data-alpha-letter="${alphaLetter}">
+        <td class="selection-cell" data-label="Seleziona">
+          <input
+            type="checkbox"
+            class="row-selection-checkbox"
+            data-product="${escapeHtml(group.product)}"
+            aria-label="Seleziona ${escapeHtml(group.product)}"
+            ${isChecked ? "checked" : ""}
+          >
+        </td>
+        <td data-label="Prodotto">${escapeHtml(group.product)}</td>
+        <td data-label="Rivenditore">
           <select class="row-rivenditore-select" data-product="${escapeHtml(group.product)}">
             ${rivenditoreOptions}
           </select>
         </td>
-        <td>${escapeHtml(row.categoria || "-")}</td>
-        <td>${escapeHtml(row.prezzo)}</td>
-        <td>
+        <td data-label="Categoria">${escapeHtml(row.categoria || "-")}</td>
+        <td data-label="Prezzo">${escapeHtml(row.prezzo)}</td>
+        <td data-label="Azioni">
           <div class="row-actions">
             <button
               type="button"
@@ -669,6 +999,8 @@ function renderRows() {
   }).join("");
 
   elements.tableCounter.textContent = `${state.filteredProducts.length} prodotti`;
+  renderAlphabetIndex();
+  renderSelectedRowsBox();
 }
 
 async function loadOwnerOptions() {
@@ -755,6 +1087,7 @@ async function loadRows() {
     ...row,
     rivenditore_name: rivenditoreMap.get(String(row.retailer_id)) || "-"
   }));
+  syncCheckedProducts();
 
   if (state.editingRowId && !findRowById(state.editingRowId)) {
     setPriceFormMode("create");
@@ -774,12 +1107,15 @@ async function refreshData() {
   }
 
   clearFeedback();
+  showLoadingOverlay("Caricamento dati...");
   try {
     await loadRivenditores();
     await loadRows();
   } catch (error) {
     showTableMessage(`Errore nel caricamento dati: ${error.message}`);
     showFeedback(`Errore nel caricamento dati: ${error.message}`, "error");
+  } finally {
+    hideLoadingOverlay();
   }
 }
 
@@ -813,6 +1149,24 @@ async function resolveRivenditoreForSubmit() {
       .single();
 
     if (error) {
+      if (error.code === "23505") {
+        const existingRivenditore = await findRivenditoreByOwnerAndName(state.currentOwner, newRivenditoreName);
+        if (existingRivenditore) {
+          await loadRivenditores();
+          state.rivenditoreSearchTerm = "";
+          setFormRivenditoreSelection(existingRivenditore.id);
+          return {
+            rivenditoreId: Number(existingRivenditore.id),
+            rivenditoreName: existingRivenditore.name,
+            created: false
+          };
+        }
+
+        throw new Error(
+          "Creazione rivenditore fallita: il database ha ancora un vincolo globale su name. Esegui supabase/owner_unique_migration.sql."
+        );
+      }
+
       throw new Error(`Creazione rivenditore fallita: ${error.message}`);
     }
 
@@ -866,23 +1220,24 @@ function resolveCategoryForSubmit() {
 }
 
 async function applyOwnerSelection(owner, options = {}) {
-  const canonicalOwner = findCanonicalOwner(owner);
-  if (!canonicalOwner) {
-    setOwnerStatus("Seleziona un owner valido dalla lista.", "error");
+  const normalizedOwner = normalizeOwnerValue(owner);
+  if (!normalizedOwner) {
+    setOwnerStatus("Seleziona o crea un owner valido.", "error");
     return;
   }
 
+  const canonicalOwner = ensureOwnerOption(normalizedOwner);
   state.currentOwner = canonicalOwner;
+  state.ownerSearchTerm = "";
   cacheOwner(canonicalOwner);
   state.selectedRivenditoreByProduct = {};
+  state.checkedProducts = {};
   setPriceFormMode("create");
   renderOwnerSelect();
-  setOwnerStatus(`Owner attivo: ${canonicalOwner}.`, "neutral");
+  renderSelectedRowsBox();
+  setOwnerStatus("");
+  closeOwnerDropdown();
   await refreshData();
-
-  if (!options.silent) {
-    showFeedback(`Owner attivo: ${canonicalOwner}.`);
-  }
 }
 
 async function testRivenditoresQuery() {
@@ -928,84 +1283,93 @@ async function handlePriceSubmit(event) {
   if (!state.currentOwner) {
     showFeedback("Seleziona prima un owner.", "error");
     setOwnerStatus("Seleziona prima un owner.", "error");
-    elements.ownerSelect?.focus();
+    openOwnerDropdown();
     return;
   }
 
-  const formData = new FormData(event.currentTarget);
-  const prodotto = String(formData.get("prodotto") || "").trim();
-  const prezzo = String(formData.get("prezzo") || "").trim();
-  let rivenditoreInfo;
-  let categoria;
-
+  showLoadingOverlay(state.editingRowId ? "Aggiornamento riga..." : "Salvataggio riga...");
   try {
-    rivenditoreInfo = await resolveRivenditoreForSubmit();
-    categoria = resolveCategoryForSubmit();
-  } catch (error) {
-    showFeedback(error.message, "error");
-    return;
-  }
+    const formData = new FormData(event.currentTarget);
+    const prodotto = String(formData.get("prodotto") || "").trim();
+    const prezzo = String(formData.get("prezzo") || "").trim();
+    let rivenditoreInfo;
+    let categoria;
 
-  const rivenditoreId = rivenditoreInfo.rivenditoreId;
-
-  if (!prodotto || !rivenditoreId || !prezzo) {
-    showFeedback("Compila prodotto, rivenditore e prezzo.", "error");
-    return;
-  }
-
-  const parsedPrice = parsePriceText(prezzo);
-  const payload = {
-    owner: state.currentOwner,
-    prodotto,
-    retailer_id: rivenditoreId,
-    categoria,
-    prezzo,
-    prezzo_valore: parsedPrice.value,
-    prezzo_unita: parsedPrice.unit
-  };
-
-  if (state.editingRowId) {
-    const editingRowId = state.editingRowId;
-    const previousRow = findRowById(editingRowId);
-    const { error } = await supabaseClient
-      .from("listino_prezzi_raw")
-      .update(payload)
-      .eq("id", editingRowId)
-      .eq("owner", state.currentOwner);
-
-    if (error) {
-      showFeedback(`Aggiornamento riga fallito: ${error.message}`, "error");
+    try {
+      rivenditoreInfo = await resolveRivenditoreForSubmit();
+      categoria = resolveCategoryForSubmit();
+    } catch (error) {
+      showFeedback(error.message, "error");
       return;
     }
 
-    if (previousRow && previousRow.prodotto !== prodotto) {
-      delete state.selectedRivenditoreByProduct[previousRow.prodotto];
+    const rivenditoreId = rivenditoreInfo.rivenditoreId;
+
+    if (!prodotto || !rivenditoreId || !prezzo) {
+      showFeedback("Compila prodotto, rivenditore e prezzo.", "error");
+      return;
+    }
+
+    const parsedPrice = parsePriceText(prezzo);
+    const payload = {
+      owner: state.currentOwner,
+      prodotto,
+      retailer_id: rivenditoreId,
+      categoria,
+      prezzo,
+      prezzo_valore: parsedPrice.value,
+      prezzo_unita: parsedPrice.unit
+    };
+
+    if (state.editingRowId) {
+      const editingRowId = state.editingRowId;
+      const previousRow = findRowById(editingRowId);
+      const { error } = await supabaseClient
+        .from("listino_prezzi_raw")
+        .update(payload)
+        .eq("id", editingRowId)
+        .eq("owner", state.currentOwner);
+
+      if (error) {
+        showFeedback(`Aggiornamento riga fallito: ${error.message}`, "error");
+        return;
+      }
+
+      if (previousRow && previousRow.prodotto !== prodotto) {
+        delete state.selectedRivenditoreByProduct[previousRow.prodotto];
+        if (state.checkedProducts[previousRow.prodotto]) {
+          delete state.checkedProducts[previousRow.prodotto];
+          state.checkedProducts[prodotto] = true;
+        }
+      }
+
+      state.selectedRivenditoreByProduct[prodotto] = String(rivenditoreId);
+      setPriceFormMode("create");
+      await refreshData();
+      showFeedback(rivenditoreInfo.created
+        ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino aggiornata.`
+        : "Riga listino aggiornata con successo.");
+      return;
+    }
+
+    const { error } = await supabaseClient
+      .from("listino_prezzi_raw")
+      .insert([payload]);
+
+    if (error) {
+      showFeedback(`Salvataggio riga fallito: ${error.message}`, "error");
+      return;
     }
 
     state.selectedRivenditoreByProduct[prodotto] = String(rivenditoreId);
     setPriceFormMode("create");
-    await refreshData();
+    await loadRows();
     showFeedback(rivenditoreInfo.created
-      ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino aggiornata.`
-      : "Riga listino aggiornata con successo.");
-    return;
+      ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino salvata.`
+      : "Riga listino salvata con successo.");
+  } finally {
+    hideLoadingOverlay();
   }
-
-  const { error } = await supabaseClient
-    .from("listino_prezzi_raw")
-    .insert([payload]);
-
-  if (error) {
-    showFeedback(`Salvataggio riga fallito: ${error.message}`, "error");
-    return;
-  }
-
-  state.selectedRivenditoreByProduct[prodotto] = String(rivenditoreId);
-  setPriceFormMode("create");
-  await loadRows();
-  showFeedback(rivenditoreInfo.created
-    ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino salvata.`
-    : "Riga listino salvata con successo.");
 }
 
 function handleCancelEdit() {
@@ -1089,9 +1453,82 @@ function handleCategoryDropdownOptionClick(event) {
   closeCategoryDropdown();
 }
 
+function handleOwnerDropdownToggle() {
+  if (state.ownerDropdownOpen) {
+    closeOwnerDropdown();
+    return;
+  }
+
+  openOwnerDropdown();
+}
+
+function handleOwnerDropdownSearch(event) {
+  state.ownerSearchTerm = normalizeOwnerValue(event.target.value);
+  renderOwnerSelect();
+}
+
+function handleOwnerDropdownSearchKeydown(event) {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  const typedOwner = normalizeOwnerValue(event.currentTarget.value);
+  const filteredOwners = state.ownerOptions.filter((owner) => owner.toLowerCase().includes(typedOwner.toLowerCase()));
+  const exactOwner = findCanonicalOwner(typedOwner);
+  const ownerToApply = exactOwner || filteredOwners[0] || typedOwner;
+
+  if (!ownerToApply) {
+    return;
+  }
+
+  setOwnerStatus(`Caricamento dati per ${ownerToApply}...`, "neutral");
+  applyOwnerSelection(ownerToApply, { silent: true }).catch((error) => {
+    setOwnerStatus(`Errore nel caricamento owner: ${error.message}`, "error");
+    showFeedback(`Errore nel caricamento owner: ${error.message}`, "error");
+  });
+}
+
+function handleOwnerDropdownOptionClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const button = target.closest("button[data-owner-value]");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const ownerValue = normalizeOwnerValue(button.dataset.ownerValue);
+  if (!ownerValue) {
+    return;
+  }
+
+  setOwnerStatus(`Caricamento dati per ${ownerValue}...`, "neutral");
+  applyOwnerSelection(ownerValue, { silent: true }).catch((error) => {
+    setOwnerStatus(`Errore nel caricamento owner: ${error.message}`, "error");
+    showFeedback(`Errore nel caricamento owner: ${error.message}`, "error");
+  });
+}
+
 function handleAdvancedToggle() {
   state.advancedFiltersOpen = !state.advancedFiltersOpen;
   renderAdvancedFilters();
+}
+
+function handleAlphabetIndexClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const button = target.closest("button[data-letter]");
+  if (!(button instanceof HTMLButtonElement) || button.disabled) {
+    return;
+  }
+
+  scrollToAlphabetLetter(button.dataset.letter || "");
 }
 
 function handleDocumentClick(event) {
@@ -1106,10 +1543,14 @@ function handleDocumentClick(event) {
   if (elements.categoryDropdown && !elements.categoryDropdown.contains(target)) {
     closeCategoryDropdown();
   }
+  if (elements.ownerDropdown && !elements.ownerDropdown.contains(target)) {
+    closeOwnerDropdown();
+  }
 }
 
 function handleDocumentKeydown(event) {
   if (event.key === "Escape") {
+    closeOwnerDropdown();
     closeRivenditoreDropdown();
     closeCategoryDropdown();
   }
@@ -1117,6 +1558,22 @@ function handleDocumentKeydown(event) {
 
 function handleRowRivenditoreChange(event) {
   const target = event.target;
+  if (target instanceof HTMLInputElement && target.classList.contains("row-selection-checkbox")) {
+    const product = target.dataset.product;
+    if (!product) {
+      return;
+    }
+
+    if (target.checked) {
+      state.checkedProducts[product] = true;
+    } else {
+      delete state.checkedProducts[product];
+    }
+
+    renderSelectedRowsBox();
+    return;
+  }
+
   if (!(target instanceof HTMLSelectElement) || !target.classList.contains("row-rivenditore-select")) {
     return;
   }
@@ -1149,24 +1606,29 @@ async function handleDeleteRow(rowId) {
     return;
   }
 
-  const { error } = await supabaseClient
-    .from("listino_prezzi_raw")
-    .delete()
-    .eq("id", rowId)
-    .eq("owner", state.currentOwner);
+  showLoadingOverlay("Cancellazione riga...");
+  try {
+    const { error } = await supabaseClient
+      .from("listino_prezzi_raw")
+      .delete()
+      .eq("id", rowId)
+      .eq("owner", state.currentOwner);
 
-  if (error) {
-    showFeedback(`Cancellazione fallita: ${error.message}`, "error");
-    return;
+    if (error) {
+      showFeedback(`Cancellazione fallita: ${error.message}`, "error");
+      return;
+    }
+
+    delete state.selectedRivenditoreByProduct[row.prodotto];
+    if (String(state.editingRowId) === String(rowId)) {
+      setPriceFormMode("create");
+    }
+
+    await refreshData();
+    showFeedback(`Riga "${row.prodotto}" per "${row.rivenditore_name}" cancellata.`);
+  } finally {
+    hideLoadingOverlay();
   }
-
-  delete state.selectedRivenditoreByProduct[row.prodotto];
-  if (String(state.editingRowId) === String(rowId)) {
-    setPriceFormMode("create");
-  }
-
-  await refreshData();
-  showFeedback(`Riga "${row.prodotto}" per "${row.rivenditore_name}" cancellata.`);
 }
 
 async function handleRowActionClick(event) {
@@ -1202,31 +1664,16 @@ async function handleRowActionClick(event) {
   }
 }
 
-function handleOwnerSelectChange(event) {
-  const selectedOwner = findCanonicalOwner(event.target.value);
-  if (!selectedOwner) {
-    clearCurrentOwner();
-    return;
-  }
-  setOwnerStatus(`Caricamento dati per ${selectedOwner}...`, "neutral");
-
-  applyOwnerSelection(selectedOwner, { silent: true }).catch((error) => {
-    setOwnerStatus(`Errore nel caricamento owner: ${error.message}`, "error");
-    showFeedback(`Errore nel caricamento owner: ${error.message}`, "error");
-    if (state.currentOwner) {
-      setSelectValue(elements.ownerSelect, state.currentOwner);
-      return;
-    }
-    setSelectValue(elements.ownerSelect, "");
-    clearCurrentOwner();
-  });
-}
-
 function bindEvents() {
-  elements.ownerSelect.addEventListener("change", handleOwnerSelectChange);
+  elements.ownerDropdownButton.addEventListener("click", handleOwnerDropdownToggle);
+  elements.ownerDropdownSearch.addEventListener("input", handleOwnerDropdownSearch);
+  elements.ownerDropdownSearch.addEventListener("keydown", handleOwnerDropdownSearchKeydown);
+  elements.ownerDropdownOptions.addEventListener("click", handleOwnerDropdownOptionClick);
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceCancelButton.addEventListener("click", handleCancelEdit);
+  elements.selectedRowsCopyButton?.addEventListener("click", handleSelectedRowsCopy);
   elements.advancedToggleButton.addEventListener("click", handleAdvancedToggle);
+  elements.alphabetIndex?.addEventListener("click", handleAlphabetIndexClick);
   elements.refreshButton.addEventListener("click", refreshData);
   elements.rivenditoreDropdownButton.addEventListener("click", handleRivenditoreDropdownToggle);
   elements.rivenditoreDropdownSearch.addEventListener("input", handleRivenditoreDropdownSearch);
@@ -1245,6 +1692,7 @@ function bindEvents() {
 }
 
 async function bootstrap() {
+  showLoadingOverlay("Avvio applicazione...");
   try {
     supabaseClient = createSupabaseClient();
     window.listinoDebug = {
@@ -1258,23 +1706,24 @@ async function bootstrap() {
     renderAdvancedFilters();
     await loadOwnerOptions();
 
-    if (!state.ownerOptions.length) {
-      showFatal("Nessun owner trovato nel database.");
-      setOwnerStatus("Nessun owner trovato nel database.", "error");
-      return;
-    }
-
     const cachedOwner = getCachedOwner();
-    if (isKnownOwner(cachedOwner)) {
+    if (cachedOwner) {
       await applyOwnerSelection(cachedOwner, { silent: true });
       return;
     }
 
-    setSelectValue(elements.ownerSelect, "");
     clearCurrentOwner();
+    setOwnerStatus(
+      state.ownerOptions.length
+        ? "Seleziona un owner esistente oppure digitane uno nuovo."
+        : "Nessun owner presente: digita un nome per iniziare.",
+      "neutral"
+    );
   } catch (error) {
     showFatal(`Avvio app fallito: ${error.message}`);
     setOwnerStatus(`Avvio app fallito: ${error.message}`, "error");
+  } finally {
+    hideLoadingOverlay();
   }
 }
 

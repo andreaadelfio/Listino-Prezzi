@@ -12,7 +12,8 @@ $$;
 
 create table if not exists public.retailers (
   id bigint generated always as identity primary key,
-  name text not null unique,
+  owner text not null default 'default',
+  name text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   created_by uuid references auth.users(id)
@@ -20,6 +21,7 @@ create table if not exists public.retailers (
 
 create table if not exists public.listino_prezzi_raw (
   id bigint generated always as identity primary key,
+  owner text not null default 'default',
   prodotto text not null,
   retailer_id bigint not null references public.retailers(id) on delete restrict,
   categoria text,
@@ -34,8 +36,48 @@ create table if not exists public.listino_prezzi_raw (
 alter table public.listino_prezzi_raw
 drop column if exists is_new;
 
-create index if not exists idx_rivenditores_name on public.retailers(name);
+alter table public.retailers
+add column if not exists owner text;
+
+alter table public.listino_prezzi_raw
+add column if not exists owner text;
+
+update public.retailers
+set owner = 'default'
+where owner is null or btrim(owner) = '';
+
+update public.listino_prezzi_raw l
+set owner = coalesce(nullif(btrim(r.owner), ''), 'default')
+from public.retailers r
+where l.retailer_id = r.id
+  and (l.owner is null or btrim(l.owner) = '');
+
+update public.listino_prezzi_raw
+set owner = 'default'
+where owner is null or btrim(owner) = '';
+
+alter table public.retailers
+alter column owner set default 'default';
+
+alter table public.retailers
+alter column owner set not null;
+
+alter table public.listino_prezzi_raw
+alter column owner set default 'default';
+
+alter table public.listino_prezzi_raw
+alter column owner set not null;
+
+alter table public.retailers
+drop constraint if exists retailers_name_key;
+
+create unique index if not exists idx_retailers_owner_name_unique
+on public.retailers(owner, name);
+
+drop index if exists idx_rivenditores_name;
+create index if not exists idx_listino_owner on public.listino_prezzi_raw(owner);
 create index if not exists idx_listino_prodotto on public.listino_prezzi_raw(prodotto);
+create index if not exists idx_listino_owner_prodotto on public.listino_prezzi_raw(owner, prodotto);
 create index if not exists idx_listino_categoria on public.listino_prezzi_raw(categoria);
 create index if not exists idx_listino_rivenditore on public.listino_prezzi_raw(retailer_id);
 
@@ -52,6 +94,7 @@ for each row execute function public.set_updated_at();
 create or replace view public.listino_prezzi_raw_excel as
 select
   l.id,
+  l.owner,
   l.prodotto,
   r.name as rivenditore,
   concat(l.prodotto, '-', r.name) as prod_riv,
