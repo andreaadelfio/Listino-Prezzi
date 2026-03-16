@@ -260,23 +260,6 @@ th {
   top: 0;
 }
 
-.row-meta {
-  color: var(--ink-soft);
-  font-size: 0.9rem;
-}
-
-.tag-new {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  padding: 0.2rem 0.55rem;
-  background: rgba(166, 75, 42, 0.12);
-  color: var(--accent-deep);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
 @media (max-width: 1080px) {
   .hero,
   .main-grid,

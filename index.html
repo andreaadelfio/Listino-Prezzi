@@ -4,7 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Listino Prezzi Raw</title>
-    <link rel="stylesheet" href="./assets/styles.css">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260316-6">
   </head>
   <body>
     <div class="page-shell">
@@ -120,7 +121,7 @@
 
             <div class="form-actions">
               <button class="primary-button" type="submit">Salva riga</button>
-              <p class="form-note">`Prod-Riv` viene calcolato automaticamente.</p>
+              <p class="form-note">La combinazione prodotto-retailer viene gestita automaticamente.</p>
             </div>
           </form>
         </section>
@@ -142,16 +143,13 @@
                 <tr>
                   <th>Prodotto</th>
                   <th>Rivenditore</th>
-                  <th>Prod-Riv</th>
                   <th>Categoria</th>
                   <th>Prezzo</th>
-                  <th>Is New</th>
-                  <th>Creato</th>
                 </tr>
               </thead>
               <tbody id="rows-body">
                 <tr>
-                  <td colspan="7">Caricamento...</td>
+                  <td colspan="4">Caricamento...</td>
                 </tr>
               </tbody>
             </table>
@@ -161,7 +159,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./assets/config.js"></script>
-    <script src="./assets/app.js"></script>
+    <script src="./assets/config.js?v=20260316-6"></script>
+    <script src="./assets/app.js?v=20260316-6"></script>
   </body>
 </html>

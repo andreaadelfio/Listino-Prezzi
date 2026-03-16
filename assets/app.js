@@ -1,11 +1,12 @@
-const { supabaseUrl, supabaseKey } = window.APP_CONFIG;
-const { createClient } = window.supabase;
-const supabase = createClient(supabaseUrl, supabaseKey);
+const APP_VERSION = "20260316-6";
+const TABLE_COLUMN_COUNT = 4;
+window.__listinoVersion = APP_VERSION;
 
 const state = {
   retailers: [],
   rows: [],
-  filteredRows: []
+  filteredProducts: [],
+  selectedRetailerByProduct: {}
 };
 
 const elements = {
@@ -22,6 +23,30 @@ const elements = {
   tableCounter: document.querySelector("#table-counter"),
   feedback: document.querySelector("#feedback")
 };
+
+if (elements.authState) {
+  elements.authState.textContent = `JavaScript caricato (${APP_VERSION}), inizializzazione in corso...`;
+}
+
+if (elements.rowsBody) {
+  elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Inizializzazione frontend...</td></tr>`;
+}
+
+function showFatal(message) {
+  if (elements.rowsBody) {
+    elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">${message}</td></tr>`;
+  }
+  if (elements.tableCounter) {
+    elements.tableCounter.textContent = "errore";
+  }
+  showFeedback(message, "error");
+}
+
+function showTableMessage(message) {
+  if (elements.rowsBody) {
+    elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">${message}</td></tr>`;
+  }
+}
 
 function showFeedback(message, type = "success") {
   elements.feedback.textContent = message;
@@ -54,18 +79,23 @@ function parsePriceText(priceText) {
   };
 }
 
-function formatDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("it-IT", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(date);
+function createSupabaseClient() {
+  if (!window.APP_CONFIG) {
+    throw new Error("Configurazione APP_CONFIG non trovata.");
+  }
+  if (!window.supabase || typeof window.supabase.createClient !== "function") {
+    throw new Error("Client Supabase non caricato. Controlla la connessione o il CDN.");
+  }
+
+  const { supabaseUrl, supabaseKey } = window.APP_CONFIG;
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Supabase URL o chiave mancante in assets/config.js.");
+  }
+
+  return window.supabase.createClient(supabaseUrl, supabaseKey);
 }
+
+let supabaseClient;
 
 function renderRetailerOptions() {
   const options = state.retailers
@@ -96,56 +126,117 @@ function applyFilters() {
   const category = elements.categoryFilter.value;
   const onlyNew = elements.newFilter.checked;
 
-  state.filteredRows = state.rows.filter((row) => {
-    const haystack = [
-      row.prodotto,
-      row.prezzo,
-      row.categoria,
-      row.retailers?.name,
-      `${row.prodotto}-${row.retailers?.name || ""}`
-    ]
+  const groupedProducts = buildProductGroups();
+  state.filteredProducts = groupedProducts.filter((group) => {
+    const haystack = group.rows
+      .flatMap((row) => [
+        row.prodotto,
+        row.prezzo,
+        row.categoria,
+        row.retailer_name,
+        `${row.prodotto}-${row.retailer_name || ""}`
+      ])
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
 
     if (search && !haystack.includes(search)) return false;
-    if (retailerId && String(row.retailer_id) !== retailerId) return false;
-    if (category && row.categoria !== category) return false;
-    if (onlyNew && !row.is_new) return false;
+    if (retailerId && !group.rows.some((row) => String(row.retailer_id) === retailerId)) return false;
+    if (category && !group.rows.some((row) => row.categoria === category)) return false;
+    if (onlyNew && !group.rows.some((row) => row.is_new)) return false;
     return true;
   });
 
   renderRows();
 }
 
+function buildProductGroups() {
+  const productMap = new Map();
+
+  state.rows.forEach((row) => {
+    const key = row.prodotto;
+    if (!productMap.has(key)) {
+      productMap.set(key, {
+        product: key,
+        rows: []
+      });
+    }
+    productMap.get(key).rows.push(row);
+  });
+
+  return [...productMap.values()]
+    .map((group) => {
+      const uniqueRetailerRows = new Map();
+      group.rows.forEach((row) => {
+        const retailerKey = String(row.retailer_id ?? row.retailer_name ?? "");
+        const existingRow = uniqueRetailerRows.get(retailerKey);
+        if (!existingRow) {
+          uniqueRetailerRows.set(retailerKey, row);
+          return;
+        }
+
+        const existingDate = new Date(existingRow.created_at || 0).getTime();
+        const currentDate = new Date(row.created_at || 0).getTime();
+        if (currentDate >= existingDate) {
+          uniqueRetailerRows.set(retailerKey, row);
+        }
+      });
+
+      const rows = [...uniqueRetailerRows.values()];
+      rows.sort((a, b) => {
+        const retailerA = a.retailer_name || "";
+        const retailerB = b.retailer_name || "";
+        return retailerA.localeCompare(retailerB, "it");
+      });
+
+      const savedRetailerId = state.selectedRetailerByProduct[group.product];
+      const selectedRow = rows.find((row) => String(row.retailer_id) === String(savedRetailerId))
+        || rows[0];
+
+      return {
+        product: group.product,
+        rows,
+        selectedRetailerId: String(selectedRow.retailer_id),
+        selectedRow
+      };
+    })
+    .sort((a, b) => a.product.localeCompare(b.product, "it"));
+}
+
 function renderRows() {
-  if (!state.filteredRows.length) {
-    elements.rowsBody.innerHTML = `<tr><td colspan="7">Nessuna riga trovata.</td></tr>`;
-    elements.tableCounter.textContent = "0 righe";
+  if (!state.filteredProducts.length) {
+    elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Nessuna riga trovata.</td></tr>`;
+    elements.tableCounter.textContent = "0 prodotti";
     return;
   }
 
-  elements.rowsBody.innerHTML = state.filteredRows.map((row) => {
-    const retailerName = row.retailers?.name || "-";
-    const prodRiv = `${row.prodotto}-${retailerName}`;
+  elements.rowsBody.innerHTML = state.filteredProducts.map((group) => {
+    const row = group.selectedRow;
+    const retailerOptions = group.rows.map((optionRow) => `
+      <option value="${optionRow.retailer_id}" ${String(optionRow.retailer_id) === group.selectedRetailerId ? "selected" : ""}>
+        ${escapeHtml(optionRow.retailer_name)}
+      </option>
+    `).join("");
+
     return `
       <tr>
-        <td>${escapeHtml(row.prodotto)}</td>
-        <td>${escapeHtml(retailerName)}</td>
-        <td>${escapeHtml(prodRiv)}</td>
+        <td>${escapeHtml(group.product)}</td>
+        <td>
+          <select class="row-retailer-select" data-product="${escapeHtml(group.product)}">
+            ${retailerOptions}
+          </select>
+        </td>
         <td>${escapeHtml(row.categoria || "-")}</td>
         <td>${escapeHtml(row.prezzo)}</td>
-        <td>${row.is_new ? `<span class="tag-new">Y</span>` : "N"}</td>
-        <td><span class="row-meta">${escapeHtml(formatDate(row.created_at))}</span></td>
       </tr>
     `;
   }).join("");
 
-  elements.tableCounter.textContent = `${state.filteredRows.length} righe`;
+  elements.tableCounter.textContent = `${state.filteredProducts.length} prodotti`;
 }
 
 async function loadRetailers() {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from("retailers")
     .select("id, name")
     .order("name", { ascending: true });
@@ -156,7 +247,7 @@ async function loadRetailers() {
 }
 
 async function loadRows() {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from("listino_prezzi_raw")
     .select(`
       id,
@@ -165,14 +256,17 @@ async function loadRows() {
       categoria,
       prezzo,
       is_new,
-      created_at,
-      retailers ( id, name )
+      created_at
     `)
     .order("created_at", { ascending: false })
     .limit(1000);
 
   if (error) throw error;
-  state.rows = data || [];
+  const retailerMap = new Map(state.retailers.map((retailer) => [String(retailer.id), retailer.name]));
+  state.rows = (data || []).map((row) => ({
+    ...row,
+    retailer_name: retailerMap.get(String(row.retailer_id)) || "-"
+  }));
   renderCategoryOptions();
   applyFilters();
 }
@@ -180,8 +274,10 @@ async function loadRows() {
 async function refreshData() {
   clearFeedback();
   try {
-    await Promise.all([loadRetailers(), loadRows()]);
+    await loadRetailers();
+    await loadRows();
   } catch (error) {
+    showTableMessage(`Errore nel caricamento dati: ${error.message}`);
     showFeedback(`Errore nel caricamento dati: ${error.message}`, "error");
   }
 }
@@ -190,14 +286,15 @@ async function handleRetailerSubmit(event) {
   event.preventDefault();
   clearFeedback();
 
-  const formData = new FormData(event.currentTarget);
+  const formEl = event.currentTarget;
+  const formData = new FormData(formEl);
   const name = String(formData.get("name") || "").trim();
   if (!name) {
     showFeedback("Inserisci il nome del retailer.", "error");
     return;
   }
 
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from("retailers")
     .insert([{ name }]);
 
@@ -206,16 +303,39 @@ async function handleRetailerSubmit(event) {
     return;
   }
 
-  event.currentTarget.reset();
+  formEl.reset();
   await loadRetailers();
   showFeedback(`Retailer "${name}" aggiunto con successo.`);
+}
+
+async function testRetailersQuery() {
+  if (!supabaseClient) {
+    throw new Error("Client Supabase non inizializzato.");
+  }
+  return supabaseClient
+    .from("retailers")
+    .select("id, name")
+    .order("name", { ascending: true })
+    .limit(5);
+}
+
+async function testRowsQuery() {
+  if (!supabaseClient) {
+    throw new Error("Client Supabase non inizializzato.");
+  }
+  return supabaseClient
+    .from("listino_prezzi_raw")
+    .select("id, prodotto, retailer_id, categoria, prezzo, is_new, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5);
 }
 
 async function handlePriceSubmit(event) {
   event.preventDefault();
   clearFeedback();
 
-  const formData = new FormData(event.currentTarget);
+  const formEl = event.currentTarget;
+  const formData = new FormData(formEl);
   const prodotto = String(formData.get("prodotto") || "").trim();
   const retailerId = Number(formData.get("retailer_id"));
   const categoria = String(formData.get("categoria") || "").trim() || null;
@@ -238,7 +358,7 @@ async function handlePriceSubmit(event) {
     prezzo_unita: parsedPrice.unit
   };
 
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from("listino_prezzi_raw")
     .insert([payload]);
 
@@ -247,7 +367,7 @@ async function handlePriceSubmit(event) {
     return;
   }
 
-  event.currentTarget.reset();
+  formEl.reset();
   await loadRows();
   showFeedback("Riga listino salvata con successo.");
 }
@@ -256,6 +376,7 @@ function bindEvents() {
   elements.retailerForm.addEventListener("submit", handleRetailerSubmit);
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.refreshButton.addEventListener("click", refreshData);
+  elements.rowsBody.addEventListener("change", handleRowRetailerChange);
 
   elements.searchInput.addEventListener("input", applyFilters);
   elements.retailerFilter.addEventListener("change", applyFilters);
@@ -263,9 +384,34 @@ function bindEvents() {
   elements.newFilter.addEventListener("change", applyFilters);
 }
 
+function handleRowRetailerChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLSelectElement) || !target.classList.contains("row-retailer-select")) {
+    return;
+  }
+
+  const product = target.dataset.product;
+  if (!product) {
+    return;
+  }
+
+  state.selectedRetailerByProduct[product] = target.value;
+  applyFilters();
+}
+
 async function bootstrap() {
-  bindEvents();
-  await refreshData();
+  try {
+    supabaseClient = createSupabaseClient();
+    window.listinoDebug = {
+      testRetailersQuery,
+      testRowsQuery,
+      refreshData
+    };
+    bindEvents();
+    await refreshData();
+  } catch (error) {
+    showFatal(`Avvio app fallito: ${error.message}`);
+  }
 }
 
 bootstrap();
