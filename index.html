@@ -5,27 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Listino Prezzi Raw</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./assets/styles.css?v=20260316-6">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260316-17">
   </head>
   <body>
     <div class="page-shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">GitHub Pages + Supabase</p>
-          <h1>Listino Prezzi Raw</h1>
-          <p class="hero-text">
-            App minimale per consultare e aggiornare il listino prezzi dal browser,
-            mantenendo i campi chiave-valore del foglio Excel.
-          </p>
+          <h1>Listino Prezzi</h1>
         </div>
-
-        <section class="status-card">
-          <p class="eyebrow">Modalita</p>
-          <div id="auth-state" class="status-line">Database pubblico in lettura e scrittura.</div>
-          <div class="status-actions">
-            <button id="refresh-button" class="secondary-button" type="button">Ricarica dati</button>
-          </div>
-        </section>
       </header>
 
       <main class="main-grid">
@@ -56,38 +43,14 @@
                 <option value="">Tutte</option>
               </select>
             </label>
-
-            <label class="field checkbox-field">
-              <input id="new-filter" type="checkbox">
-              <span>Mostra solo "is new"</span>
-            </label>
           </div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <p class="eyebrow">Nuovo retailer</p>
-              <h2>Aggiungi supermercato</h2>
-            </div>
-          </div>
-
-          <form id="retailer-form" class="stack-form">
-            <label class="field">
-              <span>Nome retailer</span>
-              <input name="name" type="text" placeholder="Es. Esselunga" required>
-            </label>
-
-            <button class="primary-button" type="submit">Salva retailer</button>
-            <p class="form-note">Inserimento pubblico attivo.</p>
-          </form>
         </section>
 
         <section class="panel panel-wide">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Nuova riga</p>
-              <h2>Inserisci voce listino raw</h2>
+              <p id="price-form-eyebrow" class="eyebrow">Nuova riga</p>
+              <h2 id="price-form-title">Inserisci voce listino raw</h2>
             </div>
           </div>
 
@@ -99,14 +62,35 @@
 
             <label class="field">
               <span>Retailer</span>
-              <select id="retailer-select" name="retailer_id" required>
-                <option value="">Seleziona retailer</option>
-              </select>
+              <div class="retailer-picker">
+                <input id="retailer-hidden-input" name="retailer_id" type="hidden">
+                <div id="retailer-dropdown" class="custom-dropdown">
+                  <button
+                    id="retailer-dropdown-button"
+                    class="custom-dropdown-trigger"
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                  >
+                    <span id="retailer-dropdown-label">Seleziona retailer</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M7 10l5 5 5-5z"/>
+                    </svg>
+                  </button>
+                  <div id="retailer-dropdown-panel" class="custom-dropdown-panel hidden">
+                    <input id="retailer-dropdown-search" type="search" placeholder="Cerca o crea retailer">
+                    <div id="retailer-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Retailer disponibili"></div>
+                  </div>
+                </div>
+                <p class="field-help">Se la ricerca non trova nulla, il testo digitato verra creato quando salvi la riga.</p>
+              </div>
             </label>
 
             <label class="field">
               <span>Categoria</span>
-              <input name="categoria" type="text" placeholder="Es. Cereali e legumi">
+              <select id="price-category-select" name="categoria">
+                <option value="">Seleziona categoria</option>
+              </select>
             </label>
 
             <label class="field">
@@ -114,28 +98,30 @@
               <input name="prezzo" type="text" placeholder="Es. 1EUR/l oppure 7.35EUR/kg" required>
             </label>
 
-            <label class="field checkbox-field">
-              <input name="is_new" type="checkbox">
-              <span>Is new</span>
-            </label>
-
             <div class="form-actions">
-              <button class="primary-button" type="submit">Salva riga</button>
-              <p class="form-note">La combinazione prodotto-retailer viene gestita automaticamente.</p>
+              <div class="form-button-row">
+                <button id="price-submit-button" class="primary-button" type="submit">Salva riga</button>
+                <button id="price-cancel-button" class="secondary-button hidden" type="button">Annulla modifica</button>
+              </div>
+              <p id="price-form-note" class="form-note">La combinazione prodotto-retailer viene gestita automaticamente.</p>
             </div>
           </form>
         </section>
 
         <section class="panel panel-wide">
           <div class="panel-head">
-            <div>
-              <p class="eyebrow">Dati</p>
-              <h2>Listino</h2>
+            <div class="panel-title-row">
+              <p class="eyebrow">Listino Prezzi</p>
             </div>
-            <span id="table-counter" class="pill">0 righe</span>
+            <div class="table-toolbar">
+              <button id="refresh-button" class="icon-button" type="button" aria-label="Aggiorna listino" title="Aggiorna listino">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/>
+                </svg>
+              </button>
+              <span id="table-counter" class="pill">0 prodotti</span>
+            </div>
           </div>
-
-          <div id="feedback" class="feedback hidden"></div>
 
           <div class="table-wrap">
             <table>
@@ -145,11 +131,12 @@
                   <th>Rivenditore</th>
                   <th>Categoria</th>
                   <th>Prezzo</th>
+                  <th>Azioni</th>
                 </tr>
               </thead>
               <tbody id="rows-body">
                 <tr>
-                  <td colspan="4">Caricamento...</td>
+                  <td colspan="5">Caricamento...</td>
                 </tr>
               </tbody>
             </table>
@@ -159,7 +146,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./assets/config.js?v=20260316-6"></script>
-    <script src="./assets/app.js?v=20260316-6"></script>
+    <script src="./assets/config.js?v=20260316-17"></script>
+    <script src="./assets/app.js?v=20260316-17"></script>
   </body>
 </html>

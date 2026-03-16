@@ -26,11 +26,13 @@ create table if not exists public.listino_prezzi_raw (
   prezzo text not null,
   prezzo_valore numeric(10, 2),
   prezzo_unita text,
-  is_new boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   created_by uuid references auth.users(id)
 );
+
+alter table public.listino_prezzi_raw
+drop column if exists is_new;
 
 create index if not exists idx_retailers_name on public.retailers(name);
 create index if not exists idx_listino_prodotto on public.listino_prezzi_raw(prodotto);
@@ -55,7 +57,6 @@ select
   concat(l.prodotto, '-', r.name) as prod_riv,
   l.categoria,
   l.prezzo,
-  case when l.is_new then 'Y' else 'N' end as is_new,
   l.prezzo_valore,
   l.prezzo_unita,
   l.created_at,

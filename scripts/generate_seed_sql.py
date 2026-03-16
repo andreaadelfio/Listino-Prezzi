@@ -15,11 +15,6 @@ def sql_quote(value: str | None) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def parse_is_new(value) -> bool:
-    text = str(value or "").strip().lower()
-    return text in {"y", "yes", "true", "1", "si", "sì"}
-
-
 def parse_price(price_text: str | None) -> tuple[str, str]:
     import re
 
@@ -37,14 +32,13 @@ def generate_seed_sql(workbook_path: Path = DEFAULT_WORKBOOK, output_path: Path 
     ws = wb["Listino Prezzi raw"]
 
     retailers: set[str] = set()
-    rows: list[dict[str, str | bool | None]] = []
+    rows: list[dict[str, str | None]] = []
 
     for row in range(2, ws.max_row + 1):
         prodotto = str(ws[f"A{row}"].value or "").strip()
         rivenditore = str(ws[f"B{row}"].value or "").strip()
         categoria = str(ws[f"D{row}"].value or "").strip()
         prezzo = str(ws[f"E{row}"].value or "").strip()
-        is_new = parse_is_new(ws[f"F{row}"].value)
 
         if not prodotto or len(prodotto) <= 1:
             continue
@@ -60,7 +54,6 @@ def generate_seed_sql(workbook_path: Path = DEFAULT_WORKBOOK, output_path: Path 
                 "rivenditore": rivenditore or None,
                 "categoria": categoria or None,
                 "prezzo": prezzo or None,
-                "is_new": is_new,
             }
         )
 
@@ -85,9 +78,9 @@ def generate_seed_sql(workbook_path: Path = DEFAULT_WORKBOOK, output_path: Path 
         )
         lines.append(
             "insert into public.listino_prezzi_raw "
-            "(prodotto, retailer_id, categoria, prezzo, prezzo_valore, prezzo_unita, is_new) values "
+            "(prodotto, retailer_id, categoria, prezzo, prezzo_valore, prezzo_unita) values "
             f"({sql_quote(item['prodotto'])}, {retailer_sql}, {sql_quote(item['categoria'])}, "
-            f"{sql_quote(item['prezzo'])}, {price_value}, {price_unit}, {'true' if item['is_new'] else 'false'});"
+            f"{sql_quote(item['prezzo'])}, {price_value}, {price_unit});"
         )
 
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

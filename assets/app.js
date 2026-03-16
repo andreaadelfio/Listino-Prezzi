@@ -1,32 +1,45 @@
-const APP_VERSION = "20260316-6";
-const TABLE_COLUMN_COUNT = 4;
+const APP_VERSION = "20260316-17";
+const TABLE_COLUMN_COUNT = 5;
+const FEEDBACK_DISMISS_MS = 5000;
 window.__listinoVersion = APP_VERSION;
 
 const state = {
   retailers: [],
   rows: [],
   filteredProducts: [],
-  selectedRetailerByProduct: {}
+  selectedRetailerByProduct: {},
+  editingRowId: null,
+  formRetailerId: "",
+  retailerDropdownOpen: false,
+  retailerSearchTerm: ""
 };
 
+let feedbackHideTimeoutId = null;
+let feedbackAnimationFrameId = null;
+
 const elements = {
-  authState: document.querySelector("#auth-state"),
   refreshButton: document.querySelector("#refresh-button"),
-  retailerForm: document.querySelector("#retailer-form"),
   priceForm: document.querySelector("#price-form"),
+  priceFormEyebrow: document.querySelector("#price-form-eyebrow"),
+  priceFormTitle: document.querySelector("#price-form-title"),
+  priceSubmitButton: document.querySelector("#price-submit-button"),
+  priceCancelButton: document.querySelector("#price-cancel-button"),
+  priceFormNote: document.querySelector("#price-form-note"),
   retailerFilter: document.querySelector("#retailer-filter"),
   categoryFilter: document.querySelector("#category-filter"),
-  newFilter: document.querySelector("#new-filter"),
   searchInput: document.querySelector("#search-input"),
-  retailerSelect: document.querySelector("#retailer-select"),
+  retailerHiddenInput: document.querySelector("#retailer-hidden-input"),
+  retailerDropdown: document.querySelector("#retailer-dropdown"),
+  retailerDropdownButton: document.querySelector("#retailer-dropdown-button"),
+  retailerDropdownLabel: document.querySelector("#retailer-dropdown-label"),
+  retailerDropdownPanel: document.querySelector("#retailer-dropdown-panel"),
+  retailerDropdownSearch: document.querySelector("#retailer-dropdown-search"),
+  retailerDropdownOptions: document.querySelector("#retailer-dropdown-options"),
+  priceCategorySelect: document.querySelector("#price-category-select"),
   rowsBody: document.querySelector("#rows-body"),
   tableCounter: document.querySelector("#table-counter"),
   feedback: document.querySelector("#feedback")
 };
-
-if (elements.authState) {
-  elements.authState.textContent = `JavaScript caricato (${APP_VERSION}), inizializzazione in corso...`;
-}
 
 if (elements.rowsBody) {
   elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Inizializzazione frontend...</td></tr>`;
@@ -48,12 +61,61 @@ function showTableMessage(message) {
   }
 }
 
+function stopFeedbackTimer() {
+  if (feedbackHideTimeoutId !== null) {
+    window.clearTimeout(feedbackHideTimeoutId);
+    feedbackHideTimeoutId = null;
+  }
+  if (feedbackAnimationFrameId !== null) {
+    window.cancelAnimationFrame(feedbackAnimationFrameId);
+    feedbackAnimationFrameId = null;
+  }
+}
+
+function updateFeedbackTimer(startTime, durationMs) {
+  const timerElement = elements.feedback.querySelector(".feedback-timer");
+  if (!timerElement) {
+    return;
+  }
+
+  const elapsed = performance.now() - startTime;
+  const progress = Math.min(elapsed / durationMs, 1);
+  timerElement.style.setProperty("--feedback-progress", `${progress * 100}%`);
+
+  if (progress < 1 && !elements.feedback.classList.contains("hidden")) {
+    feedbackAnimationFrameId = window.requestAnimationFrame(() => updateFeedbackTimer(startTime, durationMs));
+  }
+}
+
+function startFeedbackTimer(durationMs = FEEDBACK_DISMISS_MS) {
+  stopFeedbackTimer();
+  const startTime = performance.now();
+  updateFeedbackTimer(startTime, durationMs);
+  feedbackHideTimeoutId = window.setTimeout(() => {
+    clearFeedback();
+  }, durationMs);
+}
+
 function showFeedback(message, type = "success") {
-  elements.feedback.textContent = message;
+  stopFeedbackTimer();
+  const timerMarkup = type === "success"
+    ? `<span class="feedback-timer" aria-hidden="true"></span>`
+    : "";
+  elements.feedback.innerHTML = `
+    <span class="feedback-content">
+      <span class="feedback-message">${escapeHtml(message)}</span>
+      ${timerMarkup}
+    </span>
+  `;
   elements.feedback.className = `feedback feedback-${type}`;
+
+  if (type === "success") {
+    startFeedbackTimer();
+  }
 }
 
 function clearFeedback() {
+  stopFeedbackTimer();
   elements.feedback.textContent = "";
   elements.feedback.className = "feedback hidden";
 }
@@ -68,11 +130,14 @@ function escapeHtml(value) {
 }
 
 function parsePriceText(priceText) {
-  const match = String(priceText || "").trim().match(/(-?\d+(?:[.,]\d+)?)\s*EUR?(?:\s*\/\s*([a-zA-Z]+))?/i)
-    || String(priceText || "").trim().match(/(-?\d+(?:[.,]\d+)?)\s*€(?:\s*\/\s*([a-zA-Z]+))?/i);
+  const normalizedValue = String(priceText || "").trim();
+  const match = normalizedValue.match(/(-?\d+(?:[.,]\d+)?)\s*EUR?(?:\s*\/\s*([a-zA-Z]+))?/i)
+    || normalizedValue.match(/(-?\d+(?:[.,]\d+)?)\s*€(?:\s*\/\s*([a-zA-Z]+))?/i);
+
   if (!match) {
     return { value: null, unit: null };
   }
+
   return {
     value: Number(match[1].replace(",", ".")),
     unit: match[2] || null
@@ -97,71 +162,191 @@ function createSupabaseClient() {
 
 let supabaseClient;
 
-function renderRetailerOptions() {
-  const options = state.retailers
-    .map((retailer) => `<option value="${retailer.id}">${escapeHtml(retailer.name)}</option>`)
-    .join("");
-
-  elements.retailerSelect.innerHTML = `<option value="">Seleziona retailer</option>${options}`;
-  elements.retailerFilter.innerHTML = `<option value="">Tutti</option>${options}`;
+function setSelectValue(selectElement, value) {
+  if (!selectElement) return;
+  const desiredValue = String(value ?? "");
+  const hasOption = [...selectElement.options].some((option) => option.value === desiredValue);
+  selectElement.value = hasOption ? desiredValue : "";
 }
 
-function renderCategoryOptions() {
-  const categories = [...new Set(
+function normalizeRetailerName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function findRowById(rowId) {
+  return state.rows.find((row) => String(row.id) === String(rowId)) || null;
+}
+
+function findRetailerByName(name) {
+  const normalizedName = normalizeRetailerName(name);
+  return state.retailers.find((retailer) => normalizeRetailerName(retailer.name) === normalizedName) || null;
+}
+
+function buildCategoryList() {
+  return [...new Set(
     state.rows
       .map((row) => row.categoria)
       .filter(Boolean)
       .map((value) => String(value).trim())
   )].sort((a, b) => a.localeCompare(b, "it"));
+}
+
+function setPriceFormMode(mode, row = null) {
+  if (mode === "edit" && row) {
+    state.editingRowId = row.id;
+    elements.priceFormEyebrow.textContent = "Modifica riga";
+    elements.priceFormTitle.textContent = "Aggiorna la voce selezionata";
+    elements.priceSubmitButton.textContent = "Aggiorna riga";
+    elements.priceCancelButton.classList.remove("hidden");
+    elements.priceFormNote.textContent = `Stai modificando ${row.prodotto} presso ${row.retailer_name}.`;
+
+    elements.priceForm.elements.prodotto.value = row.prodotto || "";
+    elements.priceForm.elements.categoria.value = row.categoria || "";
+    elements.priceForm.elements.prezzo.value = row.prezzo || "";
+    setFormRetailerSelection(row.retailer_id);
+    state.retailerSearchTerm = "";
+    closeRetailerDropdown();
+    return;
+  }
+
+  state.editingRowId = null;
+  elements.priceForm.reset();
+  elements.priceFormEyebrow.textContent = "Nuova riga";
+  elements.priceFormTitle.textContent = "Inserisci voce listino raw";
+  elements.priceSubmitButton.textContent = "Salva riga";
+  elements.priceCancelButton.classList.add("hidden");
+  elements.priceFormNote.textContent = "La combinazione prodotto-retailer viene gestita automaticamente.";
+  setFormRetailerSelection("");
+  state.retailerSearchTerm = "";
+  closeRetailerDropdown();
+}
+
+function closeRetailerDropdown() {
+  state.retailerDropdownOpen = false;
+  elements.retailerDropdownButton.setAttribute("aria-expanded", "false");
+  elements.retailerDropdownPanel.classList.add("hidden");
+}
+
+function openRetailerDropdown() {
+  state.retailerDropdownOpen = true;
+  elements.retailerDropdownButton.setAttribute("aria-expanded", "true");
+  elements.retailerDropdownPanel.classList.remove("hidden");
+  elements.retailerDropdownSearch.focus();
+}
+
+function updateRetailerDropdownLabel() {
+  if (!state.formRetailerId) {
+    if (state.retailerSearchTerm) {
+      const hasMatches = state.retailers.some((item) => item.name.toLowerCase().includes(state.retailerSearchTerm.toLowerCase()));
+      if (!hasMatches) {
+        elements.retailerDropdownLabel.textContent = `Nuovo retailer: ${state.retailerSearchTerm}`;
+        return;
+      }
+    }
+    elements.retailerDropdownLabel.textContent = "Seleziona retailer";
+    return;
+  }
+
+  const retailer = state.retailers.find((item) => String(item.id) === String(state.formRetailerId));
+  elements.retailerDropdownLabel.textContent = retailer?.name || "Seleziona retailer";
+}
+
+function renderRetailerList() {
+  const searchTerm = state.retailerSearchTerm.toLowerCase();
+  elements.retailerDropdownSearch.value = state.retailerSearchTerm;
+  const filteredRetailers = state.retailers.filter((retailer) => retailer.name.toLowerCase().includes(searchTerm));
+
+  if (!filteredRetailers.length) {
+    if (state.retailerSearchTerm) {
+      elements.retailerDropdownOptions.innerHTML = `
+        <div class="custom-dropdown-empty">
+          Nessun retailer trovato. Al salvataggio verra creato "${escapeHtml(state.retailerSearchTerm)}".
+        </div>
+      `;
+    } else {
+      elements.retailerDropdownOptions.innerHTML = `<div class="custom-dropdown-empty">Nessun retailer trovato.</div>`;
+    }
+    updateRetailerDropdownLabel();
+    elements.retailerHiddenInput.value = state.formRetailerId;
+    return;
+  }
+
+  elements.retailerDropdownOptions.innerHTML = filteredRetailers.map((retailer) => {
+    const isSelected = String(retailer.id) === String(state.formRetailerId);
+    return `
+      <button
+        type="button"
+        class="custom-dropdown-option ${isSelected ? "custom-dropdown-option-active" : ""}"
+        data-retailer-id="${retailer.id}"
+        role="option"
+        aria-selected="${isSelected ? "true" : "false"}"
+      >
+        ${escapeHtml(retailer.name)}
+      </button>
+    `;
+  }).join("");
+
+  updateRetailerDropdownLabel();
+  elements.retailerHiddenInput.value = state.formRetailerId;
+}
+
+function setFormRetailerSelection(retailerId) {
+  const normalizedId = retailerId ? String(retailerId) : "";
+  const exists = state.retailers.some((retailer) => String(retailer.id) === normalizedId);
+  state.formRetailerId = exists ? normalizedId : "";
+  elements.retailerHiddenInput.value = state.formRetailerId;
+  renderRetailerList();
+}
+
+function renderRetailerControls() {
+  const currentRetailerFilter = elements.retailerFilter.value;
+  if (state.formRetailerId && !state.retailers.some((retailer) => String(retailer.id) === String(state.formRetailerId))) {
+    state.formRetailerId = "";
+  }
+  const options = state.retailers
+    .map((retailer) => `<option value="${retailer.id}">${escapeHtml(retailer.name)}</option>`)
+    .join("");
+
+  elements.retailerFilter.innerHTML = `<option value="">Tutti</option>${options}`;
+  setSelectValue(elements.retailerFilter, currentRetailerFilter);
+  renderRetailerList();
+}
+
+function renderCategoryOptions() {
+  const currentCategoryFilter = elements.categoryFilter.value;
+  const currentPriceCategory = elements.priceCategorySelect.value;
+  const categories = buildCategoryList();
+  const extraCategories = [currentCategoryFilter, currentPriceCategory]
+    .filter((value) => value && !categories.includes(value))
+    .sort((a, b) => a.localeCompare(b, "it"));
+  const finalCategories = [...categories, ...extraCategories];
 
   elements.categoryFilter.innerHTML = [
     `<option value="">Tutte</option>`,
-    ...categories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
+    ...finalCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
   ].join("");
-}
 
-function applyFilters() {
-  const search = elements.searchInput.value.trim().toLowerCase();
-  const retailerId = elements.retailerFilter.value;
-  const category = elements.categoryFilter.value;
-  const onlyNew = elements.newFilter.checked;
+  elements.priceCategorySelect.innerHTML = [
+    `<option value="">Seleziona categoria</option>`,
+    ...finalCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
+  ].join("");
 
-  const groupedProducts = buildProductGroups();
-  state.filteredProducts = groupedProducts.filter((group) => {
-    const haystack = group.rows
-      .flatMap((row) => [
-        row.prodotto,
-        row.prezzo,
-        row.categoria,
-        row.retailer_name,
-        `${row.prodotto}-${row.retailer_name || ""}`
-      ])
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-
-    if (search && !haystack.includes(search)) return false;
-    if (retailerId && !group.rows.some((row) => String(row.retailer_id) === retailerId)) return false;
-    if (category && !group.rows.some((row) => row.categoria === category)) return false;
-    if (onlyNew && !group.rows.some((row) => row.is_new)) return false;
-    return true;
-  });
-
-  renderRows();
+  setSelectValue(elements.categoryFilter, currentCategoryFilter);
+  setSelectValue(elements.priceCategorySelect, currentPriceCategory);
 }
 
 function buildProductGroups() {
   const productMap = new Map();
 
   state.rows.forEach((row) => {
-    const key = row.prodotto;
-    if (!productMap.has(key)) {
-      productMap.set(key, {
-        product: key,
+    const productKey = row.prodotto;
+    if (!productMap.has(productKey)) {
+      productMap.set(productKey, {
+        product: productKey,
         rows: []
       });
     }
-    productMap.get(key).rows.push(row);
+    productMap.get(productKey).rows.push(row);
   });
 
   return [...productMap.values()]
@@ -182,8 +367,7 @@ function buildProductGroups() {
         }
       });
 
-      const rows = [...uniqueRetailerRows.values()];
-      rows.sort((a, b) => {
+      const rows = [...uniqueRetailerRows.values()].sort((a, b) => {
         const retailerA = a.retailer_name || "";
         const retailerB = b.retailer_name || "";
         return retailerA.localeCompare(retailerB, "it");
@@ -201,6 +385,34 @@ function buildProductGroups() {
       };
     })
     .sort((a, b) => a.product.localeCompare(b.product, "it"));
+}
+
+function applyFilters() {
+  const search = elements.searchInput.value.trim().toLowerCase();
+  const retailerId = elements.retailerFilter.value;
+  const category = elements.categoryFilter.value;
+
+  const groupedProducts = buildProductGroups();
+  state.filteredProducts = groupedProducts.filter((group) => {
+    const haystack = group.rows
+      .flatMap((row) => [
+        row.prodotto,
+        row.prezzo,
+        row.categoria,
+        row.retailer_name,
+        `${row.prodotto}-${row.retailer_name || ""}`
+      ])
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    if (search && !haystack.includes(search)) return false;
+    if (retailerId && !group.rows.some((row) => String(row.retailer_id) === retailerId)) return false;
+    if (category && !group.rows.some((row) => row.categoria === category)) return false;
+    return true;
+  });
+
+  renderRows();
 }
 
 function renderRows() {
@@ -228,6 +440,34 @@ function renderRows() {
         </td>
         <td>${escapeHtml(row.categoria || "-")}</td>
         <td>${escapeHtml(row.prezzo)}</td>
+        <td>
+          <div class="row-actions">
+            <button
+              type="button"
+              class="icon-button"
+              data-action="edit-row"
+              data-row-id="${row.id}"
+              aria-label="Modifica ${escapeHtml(group.product)} presso ${escapeHtml(row.retailer_name)}"
+              title="Modifica"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 17.25V20h2.75L17.8 8.94l-2.75-2.75L4 17.25zm14.71-9.04a1.003 1.003 0 0 0 0-1.42l-1.5-1.5a1.003 1.003 0 0 0-1.42 0l-1.17 1.17 2.75 2.75 1.34-1z"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="icon-button icon-button-danger"
+              data-action="delete-row"
+              data-row-id="${row.id}"
+              aria-label="Cancella ${escapeHtml(group.product)} presso ${escapeHtml(row.retailer_name)}"
+              title="Cancella"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 7h12l-1 13H7L6 7zm3-3h6l1 2h4v2H4V6h4l1-2z"/>
+              </svg>
+            </button>
+          </div>
+        </td>
       </tr>
     `;
   }).join("");
@@ -243,7 +483,7 @@ async function loadRetailers() {
 
   if (error) throw error;
   state.retailers = data || [];
-  renderRetailerOptions();
+  renderRetailerControls();
 }
 
 async function loadRows() {
@@ -255,18 +495,23 @@ async function loadRows() {
       retailer_id,
       categoria,
       prezzo,
-      is_new,
       created_at
     `)
     .order("created_at", { ascending: false })
     .limit(1000);
 
   if (error) throw error;
+
   const retailerMap = new Map(state.retailers.map((retailer) => [String(retailer.id), retailer.name]));
   state.rows = (data || []).map((row) => ({
     ...row,
     retailer_name: retailerMap.get(String(row.retailer_id)) || "-"
   }));
+
+  if (state.editingRowId && !findRowById(state.editingRowId)) {
+    setPriceFormMode("create");
+  }
+
   renderCategoryOptions();
   applyFilters();
 }
@@ -282,36 +527,67 @@ async function refreshData() {
   }
 }
 
-async function handleRetailerSubmit(event) {
-  event.preventDefault();
-  clearFeedback();
+async function resolveRetailerForSubmit() {
+  const newRetailerName = String(state.retailerSearchTerm || "").trim();
+  if (newRetailerName) {
+    const existingRetailer = findRetailerByName(newRetailerName);
+    if (existingRetailer) {
+      state.retailerSearchTerm = "";
+      setFormRetailerSelection(existingRetailer.id);
+      return {
+        retailerId: Number(existingRetailer.id),
+        retailerName: existingRetailer.name,
+        created: false
+      };
+    }
 
-  const formEl = event.currentTarget;
-  const formData = new FormData(formEl);
-  const name = String(formData.get("name") || "").trim();
-  if (!name) {
-    showFeedback("Inserisci il nome del retailer.", "error");
-    return;
+    const hasPartialRetailers = state.retailers.some((retailer) => retailer.name.toLowerCase().includes(newRetailerName.toLowerCase()));
+    if (hasPartialRetailers) {
+      throw new Error("Seleziona un retailer dalla lista oppure continua a digitare fino a non trovare risultati.");
+    }
+
+    const { data, error } = await supabaseClient
+      .from("retailers")
+      .insert([{ name: newRetailerName }])
+      .select("id, name")
+      .single();
+
+    if (error) {
+      throw new Error(`Creazione retailer fallita: ${error.message}`);
+    }
+
+    await loadRetailers();
+    state.retailerSearchTerm = "";
+    setFormRetailerSelection(data.id);
+    return {
+      retailerId: Number(data.id),
+      retailerName: data.name,
+      created: true
+    };
   }
 
-  const { error } = await supabaseClient
-    .from("retailers")
-    .insert([{ name }]);
-
-  if (error) {
-    showFeedback(`Salvataggio retailer fallito: ${error.message}`, "error");
-    return;
+  const selectedRetailerId = Number(state.formRetailerId || elements.retailerHiddenInput.value);
+  if (!selectedRetailerId) {
+    return {
+      retailerId: null,
+      retailerName: null,
+      created: false
+    };
   }
 
-  formEl.reset();
-  await loadRetailers();
-  showFeedback(`Retailer "${name}" aggiunto con successo.`);
+  const retailer = state.retailers.find((item) => String(item.id) === String(selectedRetailerId));
+  return {
+    retailerId: selectedRetailerId,
+    retailerName: retailer?.name || null,
+    created: false
+  };
 }
 
 async function testRetailersQuery() {
   if (!supabaseClient) {
     throw new Error("Client Supabase non inizializzato.");
   }
+
   return supabaseClient
     .from("retailers")
     .select("id, name")
@@ -323,9 +599,10 @@ async function testRowsQuery() {
   if (!supabaseClient) {
     throw new Error("Client Supabase non inizializzato.");
   }
+
   return supabaseClient
     .from("listino_prezzi_raw")
-    .select("id, prodotto, retailer_id, categoria, prezzo, is_new, created_at")
+    .select("id, prodotto, retailer_id, categoria, prezzo, created_at")
     .order("created_at", { ascending: false })
     .limit(5);
 }
@@ -334,13 +611,20 @@ async function handlePriceSubmit(event) {
   event.preventDefault();
   clearFeedback();
 
-  const formEl = event.currentTarget;
-  const formData = new FormData(formEl);
+  const formData = new FormData(event.currentTarget);
   const prodotto = String(formData.get("prodotto") || "").trim();
-  const retailerId = Number(formData.get("retailer_id"));
   const categoria = String(formData.get("categoria") || "").trim() || null;
   const prezzo = String(formData.get("prezzo") || "").trim();
-  const isNew = formData.get("is_new") === "on";
+  let retailerInfo;
+
+  try {
+    retailerInfo = await resolveRetailerForSubmit();
+  } catch (error) {
+    showFeedback(error.message, "error");
+    return;
+  }
+
+  const retailerId = retailerInfo.retailerId;
 
   if (!prodotto || !retailerId || !prezzo) {
     showFeedback("Compila prodotto, retailer e prezzo.", "error");
@@ -353,10 +637,35 @@ async function handlePriceSubmit(event) {
     retailer_id: retailerId,
     categoria,
     prezzo,
-    is_new: isNew,
     prezzo_valore: parsedPrice.value,
     prezzo_unita: parsedPrice.unit
   };
+
+  if (state.editingRowId) {
+    const editingRowId = state.editingRowId;
+    const previousRow = findRowById(editingRowId);
+    const { error } = await supabaseClient
+      .from("listino_prezzi_raw")
+      .update(payload)
+      .eq("id", editingRowId);
+
+    if (error) {
+      showFeedback(`Aggiornamento riga fallito: ${error.message}`, "error");
+      return;
+    }
+
+    if (previousRow && previousRow.prodotto !== prodotto) {
+      delete state.selectedRetailerByProduct[previousRow.prodotto];
+    }
+
+    state.selectedRetailerByProduct[prodotto] = String(retailerId);
+    setPriceFormMode("create");
+    await refreshData();
+    showFeedback(retailerInfo.created
+      ? `Retailer "${retailerInfo.retailerName}" creato e riga listino aggiornata.`
+      : "Riga listino aggiornata con successo.");
+    return;
+  }
 
   const { error } = await supabaseClient
     .from("listino_prezzi_raw")
@@ -367,21 +676,74 @@ async function handlePriceSubmit(event) {
     return;
   }
 
-  formEl.reset();
+  state.selectedRetailerByProduct[prodotto] = String(retailerId);
+  setPriceFormMode("create");
   await loadRows();
-  showFeedback("Riga listino salvata con successo.");
+  showFeedback(retailerInfo.created
+    ? `Retailer "${retailerInfo.retailerName}" creato e riga listino salvata.`
+    : "Riga listino salvata con successo.");
 }
 
-function bindEvents() {
-  elements.retailerForm.addEventListener("submit", handleRetailerSubmit);
-  elements.priceForm.addEventListener("submit", handlePriceSubmit);
-  elements.refreshButton.addEventListener("click", refreshData);
-  elements.rowsBody.addEventListener("change", handleRowRetailerChange);
+function handleCancelEdit() {
+  clearFeedback();
+  setPriceFormMode("create");
+}
 
-  elements.searchInput.addEventListener("input", applyFilters);
-  elements.retailerFilter.addEventListener("change", applyFilters);
-  elements.categoryFilter.addEventListener("change", applyFilters);
-  elements.newFilter.addEventListener("change", applyFilters);
+function handleRetailerDropdownToggle() {
+  if (state.retailerDropdownOpen) {
+    closeRetailerDropdown();
+    return;
+  }
+
+  openRetailerDropdown();
+}
+
+function handleRetailerDropdownSearch(event) {
+  state.retailerSearchTerm = String(event.target.value || "").trim();
+  if (state.retailerSearchTerm) {
+    state.formRetailerId = "";
+    elements.retailerHiddenInput.value = "";
+  }
+  renderRetailerList();
+}
+
+function handleRetailerDropdownOptionClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const button = target.closest("button[data-retailer-id]");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const retailerId = button.dataset.retailerId;
+  if (!retailerId) {
+    return;
+  }
+
+  state.retailerSearchTerm = "";
+  elements.retailerDropdownSearch.value = "";
+  setFormRetailerSelection(retailerId);
+  closeRetailerDropdown();
+}
+
+function handleDocumentClick(event) {
+  const target = event.target;
+  if (!(target instanceof Node)) {
+    return;
+  }
+
+  if (!elements.retailerDropdown.contains(target)) {
+    closeRetailerDropdown();
+  }
+}
+
+function handleDocumentKeydown(event) {
+  if (event.key === "Escape") {
+    closeRetailerDropdown();
+  }
 }
 
 function handleRowRetailerChange(event) {
@@ -397,6 +759,89 @@ function handleRowRetailerChange(event) {
 
   state.selectedRetailerByProduct[product] = target.value;
   applyFilters();
+}
+
+async function handleDeleteRow(rowId) {
+  clearFeedback();
+
+  const row = findRowById(rowId);
+  if (!row) {
+    showFeedback("Riga non trovata per la cancellazione.", "error");
+    return;
+  }
+
+  const confirmMessage = `Vuoi cancellare "${row.prodotto}" per "${row.retailer_name}"?`;
+  if (!window.confirm(confirmMessage)) {
+    return;
+  }
+
+  const { error } = await supabaseClient
+    .from("listino_prezzi_raw")
+    .delete()
+    .eq("id", rowId);
+
+  if (error) {
+    showFeedback(`Cancellazione fallita: ${error.message}`, "error");
+    return;
+  }
+
+  delete state.selectedRetailerByProduct[row.prodotto];
+  if (String(state.editingRowId) === String(rowId)) {
+    setPriceFormMode("create");
+  }
+
+  await refreshData();
+  showFeedback(`Riga "${row.prodotto}" per "${row.retailer_name}" cancellata.`);
+}
+
+async function handleRowActionClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const button = target.closest("button[data-action]");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const rowId = button.dataset.rowId;
+  if (!rowId) {
+    return;
+  }
+
+  if (button.dataset.action === "edit-row") {
+    const row = findRowById(rowId);
+    if (!row) {
+      showFeedback("Riga non trovata per la modifica.", "error");
+      return;
+    }
+
+    setPriceFormMode("edit", row);
+    elements.priceForm.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (button.dataset.action === "delete-row") {
+    await handleDeleteRow(rowId);
+  }
+}
+
+function bindEvents() {
+  elements.priceForm.addEventListener("submit", handlePriceSubmit);
+  elements.priceCancelButton.addEventListener("click", handleCancelEdit);
+  elements.refreshButton.addEventListener("click", refreshData);
+  elements.retailerDropdownButton.addEventListener("click", handleRetailerDropdownToggle);
+  elements.retailerDropdownSearch.addEventListener("input", handleRetailerDropdownSearch);
+  elements.retailerDropdownOptions.addEventListener("click", handleRetailerDropdownOptionClick);
+  elements.rowsBody.addEventListener("change", handleRowRetailerChange);
+  elements.rowsBody.addEventListener("click", handleRowActionClick);
+  document.addEventListener("click", handleDocumentClick);
+  document.addEventListener("keydown", handleDocumentKeydown);
+
+  elements.searchInput.addEventListener("input", applyFilters);
+  elements.retailerFilter.addEventListener("change", applyFilters);
+  elements.categoryFilter.addEventListener("change", applyFilters);
 }
 
 async function bootstrap() {

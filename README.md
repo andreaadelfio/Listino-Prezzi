@@ -32,7 +32,6 @@ La view ricostruisce la forma "simile a Excel" con:
 - `prod_riv`
 - `categoria`
 - `prezzo`
-- `is_new`
 
 ## File utili
 
