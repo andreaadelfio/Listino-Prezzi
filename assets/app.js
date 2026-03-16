@@ -1,4 +1,4 @@
-const APP_VERSION = "20260316-43";
+const APP_VERSION = "20260316-45";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
