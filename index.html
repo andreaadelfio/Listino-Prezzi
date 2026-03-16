@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Listino Prezzi Raw</title>
+    <link rel="stylesheet" href="./assets/styles.css">
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">GitHub Pages + Supabase</p>
+          <h1>Listino Prezzi Raw</h1>
+          <p class="hero-text">
+            App minimale per consultare e aggiornare il listino prezzi dal browser,
+            mantenendo i campi chiave-valore del foglio Excel.
+          </p>
+        </div>
+
+        <section class="status-card">
+          <p class="eyebrow">Modalita</p>
+          <div id="auth-state" class="status-line">Database pubblico in lettura e scrittura.</div>
+          <div class="status-actions">
+            <button id="refresh-button" class="secondary-button" type="button">Ricarica dati</button>
+          </div>
+        </section>
+      </header>
+
+      <main class="main-grid">
+        <section class="panel panel-wide">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Filtri</p>
+              <h2>Esplora il listino</h2>
+            </div>
+          </div>
+
+          <div class="filter-grid">
+            <label class="field">
+              <span>Cerca prodotto o prezzo</span>
+              <input id="search-input" type="search" placeholder="Es. avena, kg, 2.9">
+            </label>
+
+            <label class="field">
+              <span>Retailer</span>
+              <select id="retailer-filter">
+                <option value="">Tutti</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Categoria</span>
+              <select id="category-filter">
+                <option value="">Tutte</option>
+              </select>
+            </label>
+
+            <label class="field checkbox-field">
+              <input id="new-filter" type="checkbox">
+              <span>Mostra solo "is new"</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Nuovo retailer</p>
+              <h2>Aggiungi supermercato</h2>
+            </div>
+          </div>
+
+          <form id="retailer-form" class="stack-form">
+            <label class="field">
+              <span>Nome retailer</span>
+              <input name="name" type="text" placeholder="Es. Esselunga" required>
+            </label>
+
+            <button class="primary-button" type="submit">Salva retailer</button>
+            <p class="form-note">Inserimento pubblico attivo.</p>
+          </form>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Nuova riga</p>
+              <h2>Inserisci voce listino raw</h2>
+            </div>
+          </div>
+
+          <form id="price-form" class="form-grid">
+            <label class="field">
+              <span>Prodotto</span>
+              <input name="prodotto" type="text" placeholder="Es. Avena" required>
+            </label>
+
+            <label class="field">
+              <span>Retailer</span>
+              <select id="retailer-select" name="retailer_id" required>
+                <option value="">Seleziona retailer</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Categoria</span>
+              <input name="categoria" type="text" placeholder="Es. Cereali e legumi">
+            </label>
+
+            <label class="field">
+              <span>Prezzo</span>
+              <input name="prezzo" type="text" placeholder="Es. 1EUR/l oppure 7.35EUR/kg" required>
+            </label>
+
+            <label class="field checkbox-field">
+              <input name="is_new" type="checkbox">
+              <span>Is new</span>
+            </label>
+
+            <div class="form-actions">
+              <button class="primary-button" type="submit">Salva riga</button>
+              <p class="form-note">`Prod-Riv` viene calcolato automaticamente.</p>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Dati</p>
+              <h2>Listino</h2>
+            </div>
+            <span id="table-counter" class="pill">0 righe</span>
+          </div>
+
+          <div id="feedback" class="feedback hidden"></div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Prodotto</th>
+                  <th>Rivenditore</th>
+                  <th>Prod-Riv</th>
+                  <th>Categoria</th>
+                  <th>Prezzo</th>
+                  <th>Is New</th>
+                  <th>Creato</th>
+                </tr>
+              </thead>
+              <tbody id="rows-body">
+                <tr>
+                  <td colspan="7">Caricamento...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./assets/config.js"></script>
+    <script src="./assets/app.js"></script>
+  </body>
+</html>
