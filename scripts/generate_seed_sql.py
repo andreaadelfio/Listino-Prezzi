@@ -31,7 +31,7 @@ def generate_seed_sql(workbook_path: Path = DEFAULT_WORKBOOK, output_path: Path 
     wb = load_workbook(workbook_path, data_only=True)
     ws = wb["Listino Prezzi raw"]
 
-    retailers: set[str] = set()
+    rivenditores: set[str] = set()
     rows: list[dict[str, str | None]] = []
 
     for row in range(2, ws.max_row + 1):
@@ -46,7 +46,7 @@ def generate_seed_sql(workbook_path: Path = DEFAULT_WORKBOOK, output_path: Path 
             continue
 
         if rivenditore:
-            retailers.add(rivenditore)
+            rivenditores.add(rivenditore)
 
         rows.append(
             {
@@ -63,15 +63,15 @@ def generate_seed_sql(workbook_path: Path = DEFAULT_WORKBOOK, output_path: Path 
     lines.append("truncate table public.retailers restart identity cascade;")
     lines.append("")
 
-    if retailers:
+    if rivenditores:
         lines.append("insert into public.retailers (name) values")
-        retailer_values = ",\n".join(f"  ({sql_quote(name)})" for name in sorted(retailers))
-        lines.append(retailer_values + ";")
+        rivenditore_values = ",\n".join(f"  ({sql_quote(name)})" for name in sorted(rivenditores))
+        lines.append(rivenditore_values + ";")
         lines.append("")
 
     for item in rows:
         price_value, price_unit = parse_price(item["prezzo"])
-        retailer_sql = (
+        rivenditore_sql = (
             f"(select id from public.retailers where name = {sql_quote(item['rivenditore'])})"
             if item["rivenditore"]
             else "null"
@@ -79,7 +79,7 @@ def generate_seed_sql(workbook_path: Path = DEFAULT_WORKBOOK, output_path: Path 
         lines.append(
             "insert into public.listino_prezzi_raw "
             "(prodotto, retailer_id, categoria, prezzo, prezzo_valore, prezzo_unita) values "
-            f"({sql_quote(item['prodotto'])}, {retailer_sql}, {sql_quote(item['categoria'])}, "
+            f"({sql_quote(item['prodotto'])}, {rivenditore_sql}, {sql_quote(item['categoria'])}, "
             f"{sql_quote(item['prezzo'])}, {price_value}, {price_unit});"
         )
 

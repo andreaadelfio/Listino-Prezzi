@@ -1,41 +1,57 @@
-const APP_VERSION = "20260316-17";
+const APP_VERSION = "20260316-23";
 const TABLE_COLUMN_COUNT = 5;
 const FEEDBACK_DISMISS_MS = 5000;
+const OWNER_CACHE_KEY = "listino-owner-cache";
 window.__listinoVersion = APP_VERSION;
 
 const state = {
-  retailers: [],
+  ownerOptions: [],
+  currentOwner: "",
+  rivenditores: [],
   rows: [],
   filteredProducts: [],
-  selectedRetailerByProduct: {},
+  selectedRivenditoreByProduct: {},
   editingRowId: null,
-  formRetailerId: "",
-  retailerDropdownOpen: false,
-  retailerSearchTerm: ""
+  formRivenditoreId: "",
+  rivenditoreDropdownOpen: false,
+  rivenditoreSearchTerm: "",
+  formCategoryValue: "",
+  categoryDropdownOpen: false,
+  categorySearchTerm: "",
+  advancedFiltersOpen: false
 };
 
 let feedbackHideTimeoutId = null;
 let feedbackAnimationFrameId = null;
 
 const elements = {
+  ownerSelect: document.querySelector("#owner-select"),
+  ownerStatus: document.querySelector("#owner-status"),
   refreshButton: document.querySelector("#refresh-button"),
   priceForm: document.querySelector("#price-form"),
-  priceFormEyebrow: document.querySelector("#price-form-eyebrow"),
-  priceFormTitle: document.querySelector("#price-form-title"),
   priceSubmitButton: document.querySelector("#price-submit-button"),
   priceCancelButton: document.querySelector("#price-cancel-button"),
   priceFormNote: document.querySelector("#price-form-note"),
-  retailerFilter: document.querySelector("#retailer-filter"),
+  advancedToggleButton: document.querySelector("#advanced-toggle-button"),
+  advancedFilters: document.querySelector("#advanced-filters"),
+  rivenditoreFilter: document.querySelector("#rivenditore-filter"),
   categoryFilter: document.querySelector("#category-filter"),
   searchInput: document.querySelector("#search-input"),
-  retailerHiddenInput: document.querySelector("#retailer-hidden-input"),
-  retailerDropdown: document.querySelector("#retailer-dropdown"),
-  retailerDropdownButton: document.querySelector("#retailer-dropdown-button"),
-  retailerDropdownLabel: document.querySelector("#retailer-dropdown-label"),
-  retailerDropdownPanel: document.querySelector("#retailer-dropdown-panel"),
-  retailerDropdownSearch: document.querySelector("#retailer-dropdown-search"),
-  retailerDropdownOptions: document.querySelector("#retailer-dropdown-options"),
-  priceCategorySelect: document.querySelector("#price-category-select"),
+  rivenditoreHiddenInput: document.querySelector("#rivenditore-hidden-input"),
+  rivenditoreDropdown: document.querySelector("#rivenditore-dropdown"),
+  rivenditoreDropdownButton: document.querySelector("#rivenditore-dropdown-button"),
+  rivenditoreDropdownLabel: document.querySelector("#rivenditore-dropdown-label"),
+  rivenditoreDropdownPanel: document.querySelector("#rivenditore-dropdown-panel"),
+  rivenditoreDropdownSearch: document.querySelector("#rivenditore-dropdown-search"),
+  rivenditoreDropdownOptions: document.querySelector("#rivenditore-dropdown-options"),
+  categoryHiddenInput: document.querySelector("#category-hidden-input"),
+  categoryDropdown: document.querySelector("#category-dropdown"),
+  categoryDropdownButton: document.querySelector("#category-dropdown-button"),
+  categoryDropdownLabel: document.querySelector("#category-dropdown-label"),
+  categoryDropdownPanel: document.querySelector("#category-dropdown-panel"),
+  categoryDropdownSearch: document.querySelector("#category-dropdown-search"),
+  categoryDropdownOptions: document.querySelector("#category-dropdown-options"),
+  entryRow: document.querySelector("#entry-row"),
   rowsBody: document.querySelector("#rows-body"),
   tableCounter: document.querySelector("#table-counter"),
   feedback: document.querySelector("#feedback")
@@ -73,6 +89,9 @@ function stopFeedbackTimer() {
 }
 
 function updateFeedbackTimer(startTime, durationMs) {
+  if (!elements.feedback) {
+    return;
+  }
   const timerElement = elements.feedback.querySelector(".feedback-timer");
   if (!timerElement) {
     return;
@@ -97,6 +116,9 @@ function startFeedbackTimer(durationMs = FEEDBACK_DISMISS_MS) {
 }
 
 function showFeedback(message, type = "success") {
+  if (!elements.feedback) {
+    return;
+  }
   stopFeedbackTimer();
   const timerMarkup = type === "success"
     ? `<span class="feedback-timer" aria-hidden="true"></span>`
@@ -115,6 +137,9 @@ function showFeedback(message, type = "success") {
 }
 
 function clearFeedback() {
+  if (!elements.feedback) {
+    return;
+  }
   stopFeedbackTimer();
   elements.feedback.textContent = "";
   elements.feedback.className = "feedback hidden";
@@ -144,6 +169,34 @@ function parsePriceText(priceText) {
   };
 }
 
+function normalizeOwnerValue(value) {
+  return String(value || "").trim();
+}
+
+function normalizeOwnerKey(value) {
+  return normalizeOwnerValue(value).toLowerCase();
+}
+
+function getCachedOwner() {
+  try {
+    return normalizeOwnerValue(window.localStorage.getItem(OWNER_CACHE_KEY));
+  } catch {
+    return "";
+  }
+}
+
+function cacheOwner(owner) {
+  try {
+    if (!owner) {
+      window.localStorage.removeItem(OWNER_CACHE_KEY);
+      return;
+    }
+    window.localStorage.setItem(OWNER_CACHE_KEY, owner);
+  } catch {
+    // Ignora eventuali limiti del browser sullo storage.
+  }
+}
+
 function createSupabaseClient() {
   if (!window.APP_CONFIG) {
     throw new Error("Configurazione APP_CONFIG non trovata.");
@@ -169,7 +222,16 @@ function setSelectValue(selectElement, value) {
   selectElement.value = hasOption ? desiredValue : "";
 }
 
-function normalizeRetailerName(value) {
+function findCanonicalOwner(owner) {
+  const ownerKey = normalizeOwnerKey(owner);
+  return state.ownerOptions.find((option) => normalizeOwnerKey(option) === ownerKey) || "";
+}
+
+function isKnownOwner(owner) {
+  return Boolean(findCanonicalOwner(owner));
+}
+
+function normalizeRivenditoreName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
@@ -177,9 +239,9 @@ function findRowById(rowId) {
   return state.rows.find((row) => String(row.id) === String(rowId)) || null;
 }
 
-function findRetailerByName(name) {
-  const normalizedName = normalizeRetailerName(name);
-  return state.retailers.find((retailer) => normalizeRetailerName(retailer.name) === normalizedName) || null;
+function findRivenditoreByName(name) {
+  const normalizedName = normalizeRivenditoreName(name);
+  return state.rivenditores.find((rivenditore) => normalizeRivenditoreName(rivenditore.name) === normalizedName) || null;
 }
 
 function buildCategoryList() {
@@ -191,132 +253,271 @@ function buildCategoryList() {
   )].sort((a, b) => a.localeCompare(b, "it"));
 }
 
+function setFormNote(message) {
+  if (elements.priceFormNote) {
+    elements.priceFormNote.textContent = message;
+  }
+}
+
+function setOwnerStatus(message, type = "neutral") {
+  if (!elements.ownerStatus) {
+    return;
+  }
+  elements.ownerStatus.textContent = message;
+  elements.ownerStatus.className = `field-help owner-inline-status owner-status-${type}`;
+}
+
+function renderOwnerSelect() {
+  if (!elements.ownerSelect) {
+    return;
+  }
+
+  const currentValue = findCanonicalOwner(elements.ownerSelect.value)
+    || findCanonicalOwner(state.currentOwner)
+    || findCanonicalOwner(getCachedOwner());
+
+  elements.ownerSelect.innerHTML = [
+    `<option value="">Seleziona owner</option>`,
+    ...state.ownerOptions.map((owner) => `<option value="${escapeHtml(owner)}">${escapeHtml(owner)}</option>`)
+  ].join("");
+
+  setSelectValue(elements.ownerSelect, currentValue);
+  elements.ownerSelect.disabled = !state.ownerOptions.length;
+}
+
+function renderAdvancedFilters() {
+  if (!elements.advancedFilters || !elements.advancedToggleButton) {
+    return;
+  }
+
+  elements.advancedFilters.classList.toggle("hidden", !state.advancedFiltersOpen);
+  elements.advancedToggleButton.setAttribute("aria-expanded", String(state.advancedFiltersOpen));
+  elements.advancedToggleButton.classList.toggle("advanced-toggle-button-active", state.advancedFiltersOpen);
+}
+
+function clearCurrentOwner() {
+  state.currentOwner = "";
+  cacheOwner("");
+  state.rivenditores = [];
+  state.rows = [];
+  state.filteredProducts = [];
+  state.selectedRivenditoreByProduct = {};
+  setPriceFormMode("create");
+  renderRivenditoreControls();
+  renderCategoryOptions();
+  showTableMessage("Seleziona un owner per caricare il listino.");
+  if (elements.tableCounter) {
+    elements.tableCounter.textContent = "owner richiesto";
+  }
+  setOwnerStatus("Seleziona un owner per caricare il listino.");
+}
+
 function setPriceFormMode(mode, row = null) {
   if (mode === "edit" && row) {
     state.editingRowId = row.id;
-    elements.priceFormEyebrow.textContent = "Modifica riga";
-    elements.priceFormTitle.textContent = "Aggiorna la voce selezionata";
-    elements.priceSubmitButton.textContent = "Aggiorna riga";
+    elements.priceSubmitButton.textContent = "Aggiorna";
     elements.priceCancelButton.classList.remove("hidden");
-    elements.priceFormNote.textContent = `Stai modificando ${row.prodotto} presso ${row.retailer_name}.`;
+    setFormNote(`Stai modificando ${row.prodotto} presso ${row.rivenditore_name}.`);
+    elements.entryRow?.classList.add("entry-row-editing");
 
     elements.priceForm.elements.prodotto.value = row.prodotto || "";
-    elements.priceForm.elements.categoria.value = row.categoria || "";
     elements.priceForm.elements.prezzo.value = row.prezzo || "";
-    setFormRetailerSelection(row.retailer_id);
-    state.retailerSearchTerm = "";
-    closeRetailerDropdown();
+    state.rivenditoreSearchTerm = "";
+    state.categorySearchTerm = "";
+    setFormRivenditoreSelection(row.retailer_id);
+    setFormCategorySelection(row.categoria || "");
+    closeRivenditoreDropdown();
+    closeCategoryDropdown();
     return;
   }
 
   state.editingRowId = null;
   elements.priceForm.reset();
-  elements.priceFormEyebrow.textContent = "Nuova riga";
-  elements.priceFormTitle.textContent = "Inserisci voce listino raw";
-  elements.priceSubmitButton.textContent = "Salva riga";
+  elements.priceSubmitButton.textContent = "Salva";
   elements.priceCancelButton.classList.add("hidden");
-  elements.priceFormNote.textContent = "La combinazione prodotto-retailer viene gestita automaticamente.";
-  setFormRetailerSelection("");
-  state.retailerSearchTerm = "";
-  closeRetailerDropdown();
+  setFormNote("La combinazione prodotto-rivenditore viene gestita automaticamente.");
+  state.rivenditoreSearchTerm = "";
+  state.categorySearchTerm = "";
+  elements.entryRow?.classList.remove("entry-row-editing");
+  setFormRivenditoreSelection("");
+  setFormCategorySelection("");
+  closeRivenditoreDropdown();
+  closeCategoryDropdown();
 }
 
-function closeRetailerDropdown() {
-  state.retailerDropdownOpen = false;
-  elements.retailerDropdownButton.setAttribute("aria-expanded", "false");
-  elements.retailerDropdownPanel.classList.add("hidden");
+function closeRivenditoreDropdown() {
+  state.rivenditoreDropdownOpen = false;
+  elements.rivenditoreDropdownButton.setAttribute("aria-expanded", "false");
+  elements.rivenditoreDropdownPanel.classList.add("hidden");
 }
 
-function openRetailerDropdown() {
-  state.retailerDropdownOpen = true;
-  elements.retailerDropdownButton.setAttribute("aria-expanded", "true");
-  elements.retailerDropdownPanel.classList.remove("hidden");
-  elements.retailerDropdownSearch.focus();
+function openRivenditoreDropdown() {
+  closeCategoryDropdown();
+  state.rivenditoreDropdownOpen = true;
+  elements.rivenditoreDropdownButton.setAttribute("aria-expanded", "true");
+  elements.rivenditoreDropdownPanel.classList.remove("hidden");
+  elements.rivenditoreDropdownSearch.focus();
 }
 
-function updateRetailerDropdownLabel() {
-  if (!state.formRetailerId) {
-    if (state.retailerSearchTerm) {
-      const hasMatches = state.retailers.some((item) => item.name.toLowerCase().includes(state.retailerSearchTerm.toLowerCase()));
+function updateRivenditoreDropdownLabel() {
+  if (!state.formRivenditoreId) {
+    if (state.rivenditoreSearchTerm) {
+      const hasMatches = state.rivenditores.some((item) => item.name.toLowerCase().includes(state.rivenditoreSearchTerm.toLowerCase()));
       if (!hasMatches) {
-        elements.retailerDropdownLabel.textContent = `Nuovo retailer: ${state.retailerSearchTerm}`;
+        elements.rivenditoreDropdownLabel.textContent = `Nuovo rivenditore: ${state.rivenditoreSearchTerm}`;
         return;
       }
     }
-    elements.retailerDropdownLabel.textContent = "Seleziona retailer";
+    elements.rivenditoreDropdownLabel.textContent = "Rivenditore";
     return;
   }
 
-  const retailer = state.retailers.find((item) => String(item.id) === String(state.formRetailerId));
-  elements.retailerDropdownLabel.textContent = retailer?.name || "Seleziona retailer";
+  const rivenditore = state.rivenditores.find((item) => String(item.id) === String(state.formRivenditoreId));
+  elements.rivenditoreDropdownLabel.textContent = rivenditore?.name || "Rivenditore";
 }
 
-function renderRetailerList() {
-  const searchTerm = state.retailerSearchTerm.toLowerCase();
-  elements.retailerDropdownSearch.value = state.retailerSearchTerm;
-  const filteredRetailers = state.retailers.filter((retailer) => retailer.name.toLowerCase().includes(searchTerm));
+function renderRivenditoreList() {
+  const searchTerm = state.rivenditoreSearchTerm.toLowerCase();
+  elements.rivenditoreDropdownSearch.value = state.rivenditoreSearchTerm;
+  const filteredRivenditores = state.rivenditores.filter((rivenditore) => rivenditore.name.toLowerCase().includes(searchTerm));
 
-  if (!filteredRetailers.length) {
-    if (state.retailerSearchTerm) {
-      elements.retailerDropdownOptions.innerHTML = `
+  if (!filteredRivenditores.length) {
+    if (state.rivenditoreSearchTerm) {
+      elements.rivenditoreDropdownOptions.innerHTML = `
         <div class="custom-dropdown-empty">
-          Nessun retailer trovato. Al salvataggio verra creato "${escapeHtml(state.retailerSearchTerm)}".
+          Nessun rivenditore trovato. Al salvataggio verra creato "${escapeHtml(state.rivenditoreSearchTerm)}".
         </div>
       `;
     } else {
-      elements.retailerDropdownOptions.innerHTML = `<div class="custom-dropdown-empty">Nessun retailer trovato.</div>`;
+      elements.rivenditoreDropdownOptions.innerHTML = `<div class="custom-dropdown-empty">Nessun rivenditore trovato.</div>`;
     }
-    updateRetailerDropdownLabel();
-    elements.retailerHiddenInput.value = state.formRetailerId;
+    updateRivenditoreDropdownLabel();
+    elements.rivenditoreHiddenInput.value = state.formRivenditoreId;
     return;
   }
 
-  elements.retailerDropdownOptions.innerHTML = filteredRetailers.map((retailer) => {
-    const isSelected = String(retailer.id) === String(state.formRetailerId);
+  elements.rivenditoreDropdownOptions.innerHTML = filteredRivenditores.map((rivenditore) => {
+    const isSelected = String(rivenditore.id) === String(state.formRivenditoreId);
     return `
       <button
         type="button"
         class="custom-dropdown-option ${isSelected ? "custom-dropdown-option-active" : ""}"
-        data-retailer-id="${retailer.id}"
+        data-rivenditore-id="${rivenditore.id}"
         role="option"
         aria-selected="${isSelected ? "true" : "false"}"
       >
-        ${escapeHtml(retailer.name)}
+        ${escapeHtml(rivenditore.name)}
       </button>
     `;
   }).join("");
 
-  updateRetailerDropdownLabel();
-  elements.retailerHiddenInput.value = state.formRetailerId;
+  updateRivenditoreDropdownLabel();
+  elements.rivenditoreHiddenInput.value = state.formRivenditoreId;
 }
 
-function setFormRetailerSelection(retailerId) {
-  const normalizedId = retailerId ? String(retailerId) : "";
-  const exists = state.retailers.some((retailer) => String(retailer.id) === normalizedId);
-  state.formRetailerId = exists ? normalizedId : "";
-  elements.retailerHiddenInput.value = state.formRetailerId;
-  renderRetailerList();
+function setFormRivenditoreSelection(rivenditoreId) {
+  const normalizedId = rivenditoreId ? String(rivenditoreId) : "";
+  const exists = state.rivenditores.some((rivenditore) => String(rivenditore.id) === normalizedId);
+  state.formRivenditoreId = exists ? normalizedId : "";
+  elements.rivenditoreHiddenInput.value = state.formRivenditoreId;
+  renderRivenditoreList();
 }
 
-function renderRetailerControls() {
-  const currentRetailerFilter = elements.retailerFilter.value;
-  if (state.formRetailerId && !state.retailers.some((retailer) => String(retailer.id) === String(state.formRetailerId))) {
-    state.formRetailerId = "";
+function renderRivenditoreControls() {
+  const currentRivenditoreFilter = elements.rivenditoreFilter.value;
+  if (state.formRivenditoreId && !state.rivenditores.some((rivenditore) => String(rivenditore.id) === String(state.formRivenditoreId))) {
+    state.formRivenditoreId = "";
   }
-  const options = state.retailers
-    .map((retailer) => `<option value="${retailer.id}">${escapeHtml(retailer.name)}</option>`)
+  const options = state.rivenditores
+    .map((rivenditore) => `<option value="${rivenditore.id}">${escapeHtml(rivenditore.name)}</option>`)
     .join("");
 
-  elements.retailerFilter.innerHTML = `<option value="">Tutti</option>${options}`;
-  setSelectValue(elements.retailerFilter, currentRetailerFilter);
-  renderRetailerList();
+  elements.rivenditoreFilter.innerHTML = `<option value="">Tutti</option>${options}`;
+  setSelectValue(elements.rivenditoreFilter, currentRivenditoreFilter);
+  renderRivenditoreList();
+}
+
+function closeCategoryDropdown() {
+  state.categoryDropdownOpen = false;
+  elements.categoryDropdownButton.setAttribute("aria-expanded", "false");
+  elements.categoryDropdownPanel.classList.add("hidden");
+}
+
+function openCategoryDropdown() {
+  closeRivenditoreDropdown();
+  state.categoryDropdownOpen = true;
+  elements.categoryDropdownButton.setAttribute("aria-expanded", "true");
+  elements.categoryDropdownPanel.classList.remove("hidden");
+  elements.categoryDropdownSearch.focus();
+}
+
+function updateCategoryDropdownLabel() {
+  if (!state.formCategoryValue) {
+    if (state.categorySearchTerm) {
+      const hasMatches = buildCategoryList().some((item) => item.toLowerCase().includes(state.categorySearchTerm.toLowerCase()));
+      if (!hasMatches) {
+        elements.categoryDropdownLabel.textContent = `Nuova categoria: ${state.categorySearchTerm}`;
+        return;
+      }
+    }
+    elements.categoryDropdownLabel.textContent = "Categoria";
+    return;
+  }
+
+  elements.categoryDropdownLabel.textContent = state.formCategoryValue;
+}
+
+function renderCategoryList() {
+  const searchTerm = state.categorySearchTerm.toLowerCase();
+  const categories = buildCategoryList();
+  elements.categoryDropdownSearch.value = state.categorySearchTerm;
+  const filteredCategories = categories.filter((category) => category.toLowerCase().includes(searchTerm));
+
+  if (!filteredCategories.length) {
+    if (state.categorySearchTerm) {
+      elements.categoryDropdownOptions.innerHTML = `
+        <div class="custom-dropdown-empty">
+          Nessuna categoria trovata. Al salvataggio verra usata "${escapeHtml(state.categorySearchTerm)}".
+        </div>
+      `;
+    } else {
+      elements.categoryDropdownOptions.innerHTML = `<div class="custom-dropdown-empty">Nessuna categoria trovata.</div>`;
+    }
+    updateCategoryDropdownLabel();
+    elements.categoryHiddenInput.value = state.formCategoryValue;
+    return;
+  }
+
+  elements.categoryDropdownOptions.innerHTML = filteredCategories.map((category) => {
+    const isSelected = category === state.formCategoryValue;
+    return `
+      <button
+        type="button"
+        class="custom-dropdown-option ${isSelected ? "custom-dropdown-option-active" : ""}"
+        data-category-value="${escapeHtml(category)}"
+        role="option"
+        aria-selected="${isSelected ? "true" : "false"}"
+      >
+        ${escapeHtml(category)}
+      </button>
+    `;
+  }).join("");
+
+  updateCategoryDropdownLabel();
+  elements.categoryHiddenInput.value = state.formCategoryValue;
+}
+
+function setFormCategorySelection(categoryValue) {
+  const normalizedValue = String(categoryValue || "").trim();
+  state.formCategoryValue = normalizedValue;
+  elements.categoryHiddenInput.value = normalizedValue;
+  renderCategoryList();
 }
 
 function renderCategoryOptions() {
   const currentCategoryFilter = elements.categoryFilter.value;
-  const currentPriceCategory = elements.priceCategorySelect.value;
   const categories = buildCategoryList();
-  const extraCategories = [currentCategoryFilter, currentPriceCategory]
+  const extraCategories = [currentCategoryFilter, state.formCategoryValue]
     .filter((value) => value && !categories.includes(value))
     .sort((a, b) => a.localeCompare(b, "it"));
   const finalCategories = [...categories, ...extraCategories];
@@ -326,13 +527,8 @@ function renderCategoryOptions() {
     ...finalCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
   ].join("");
 
-  elements.priceCategorySelect.innerHTML = [
-    `<option value="">Seleziona categoria</option>`,
-    ...finalCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
-  ].join("");
-
   setSelectValue(elements.categoryFilter, currentCategoryFilter);
-  setSelectValue(elements.priceCategorySelect, currentPriceCategory);
+  renderCategoryList();
 }
 
 function buildProductGroups() {
@@ -351,36 +547,36 @@ function buildProductGroups() {
 
   return [...productMap.values()]
     .map((group) => {
-      const uniqueRetailerRows = new Map();
+      const uniqueRivenditoreRows = new Map();
       group.rows.forEach((row) => {
-        const retailerKey = String(row.retailer_id ?? row.retailer_name ?? "");
-        const existingRow = uniqueRetailerRows.get(retailerKey);
+        const rivenditoreKey = String(row.retailer_id ?? row.rivenditore_name ?? "");
+        const existingRow = uniqueRivenditoreRows.get(rivenditoreKey);
         if (!existingRow) {
-          uniqueRetailerRows.set(retailerKey, row);
+          uniqueRivenditoreRows.set(rivenditoreKey, row);
           return;
         }
 
         const existingDate = new Date(existingRow.created_at || 0).getTime();
         const currentDate = new Date(row.created_at || 0).getTime();
         if (currentDate >= existingDate) {
-          uniqueRetailerRows.set(retailerKey, row);
+          uniqueRivenditoreRows.set(rivenditoreKey, row);
         }
       });
 
-      const rows = [...uniqueRetailerRows.values()].sort((a, b) => {
-        const retailerA = a.retailer_name || "";
-        const retailerB = b.retailer_name || "";
-        return retailerA.localeCompare(retailerB, "it");
+      const rows = [...uniqueRivenditoreRows.values()].sort((a, b) => {
+        const rivenditoreA = a.rivenditore_name || "";
+        const rivenditoreB = b.rivenditore_name || "";
+        return rivenditoreA.localeCompare(rivenditoreB, "it");
       });
 
-      const savedRetailerId = state.selectedRetailerByProduct[group.product];
-      const selectedRow = rows.find((row) => String(row.retailer_id) === String(savedRetailerId))
+      const savedRivenditoreId = state.selectedRivenditoreByProduct[group.product];
+      const selectedRow = rows.find((row) => String(row.retailer_id) === String(savedRivenditoreId))
         || rows[0];
 
       return {
         product: group.product,
         rows,
-        selectedRetailerId: String(selectedRow.retailer_id),
+        selectedRivenditoreId: String(selectedRow.retailer_id),
         selectedRow
       };
     })
@@ -389,7 +585,7 @@ function buildProductGroups() {
 
 function applyFilters() {
   const search = elements.searchInput.value.trim().toLowerCase();
-  const retailerId = elements.retailerFilter.value;
+  const rivenditoreId = elements.rivenditoreFilter.value;
   const category = elements.categoryFilter.value;
 
   const groupedProducts = buildProductGroups();
@@ -399,15 +595,15 @@ function applyFilters() {
         row.prodotto,
         row.prezzo,
         row.categoria,
-        row.retailer_name,
-        `${row.prodotto}-${row.retailer_name || ""}`
+        row.rivenditore_name,
+        `${row.prodotto}-${row.rivenditore_name || ""}`
       ])
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
 
     if (search && !haystack.includes(search)) return false;
-    if (retailerId && !group.rows.some((row) => String(row.retailer_id) === retailerId)) return false;
+    if (rivenditoreId && !group.rows.some((row) => String(row.retailer_id) === rivenditoreId)) return false;
     if (category && !group.rows.some((row) => row.categoria === category)) return false;
     return true;
   });
@@ -424,9 +620,9 @@ function renderRows() {
 
   elements.rowsBody.innerHTML = state.filteredProducts.map((group) => {
     const row = group.selectedRow;
-    const retailerOptions = group.rows.map((optionRow) => `
-      <option value="${optionRow.retailer_id}" ${String(optionRow.retailer_id) === group.selectedRetailerId ? "selected" : ""}>
-        ${escapeHtml(optionRow.retailer_name)}
+    const rivenditoreOptions = group.rows.map((optionRow) => `
+      <option value="${optionRow.retailer_id}" ${String(optionRow.retailer_id) === group.selectedRivenditoreId ? "selected" : ""}>
+        ${escapeHtml(optionRow.rivenditore_name)}
       </option>
     `).join("");
 
@@ -434,8 +630,8 @@ function renderRows() {
       <tr>
         <td>${escapeHtml(group.product)}</td>
         <td>
-          <select class="row-retailer-select" data-product="${escapeHtml(group.product)}">
-            ${retailerOptions}
+          <select class="row-rivenditore-select" data-product="${escapeHtml(group.product)}">
+            ${rivenditoreOptions}
           </select>
         </td>
         <td>${escapeHtml(row.categoria || "-")}</td>
@@ -447,7 +643,7 @@ function renderRows() {
               class="icon-button"
               data-action="edit-row"
               data-row-id="${row.id}"
-              aria-label="Modifica ${escapeHtml(group.product)} presso ${escapeHtml(row.retailer_name)}"
+              aria-label="Modifica ${escapeHtml(group.product)} presso ${escapeHtml(row.rivenditore_name)}"
               title="Modifica"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -459,7 +655,7 @@ function renderRows() {
               class="icon-button icon-button-danger"
               data-action="delete-row"
               data-row-id="${row.id}"
-              aria-label="Cancella ${escapeHtml(group.product)} presso ${escapeHtml(row.retailer_name)}"
+              aria-label="Cancella ${escapeHtml(group.product)} presso ${escapeHtml(row.rivenditore_name)}"
               title="Cancella"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -475,18 +671,68 @@ function renderRows() {
   elements.tableCounter.textContent = `${state.filteredProducts.length} prodotti`;
 }
 
-async function loadRetailers() {
+async function loadOwnerOptions() {
+  const [rivenditoresResponse, rowsResponse] = await Promise.all([
+    supabaseClient
+      .from("retailers")
+      .select("owner")
+      .not("owner", "is", null)
+      .limit(1000),
+    supabaseClient
+      .from("listino_prezzi_raw")
+      .select("owner")
+      .not("owner", "is", null)
+      .limit(1000)
+  ]);
+
+  if (rivenditoresResponse.error) {
+    throw rivenditoresResponse.error;
+  }
+  if (rowsResponse.error) {
+    throw rowsResponse.error;
+  }
+
+  const ownerMap = new Map();
+  [...(rivenditoresResponse.data || []), ...(rowsResponse.data || [])]
+    .map((row) => normalizeOwnerValue(row.owner))
+    .filter(Boolean)
+    .forEach((owner) => {
+      const key = normalizeOwnerKey(owner);
+      if (!ownerMap.has(key)) {
+        ownerMap.set(key, owner);
+      }
+    });
+
+  state.ownerOptions = [...ownerMap.values()].sort((a, b) => a.localeCompare(b, "it"));
+  renderOwnerSelect();
+}
+
+async function loadRivenditores() {
+  if (!state.currentOwner) {
+    state.rivenditores = [];
+    renderRivenditoreControls();
+    return;
+  }
+
   const { data, error } = await supabaseClient
     .from("retailers")
-    .select("id, name")
+    .select("id, name, owner")
+    .eq("owner", state.currentOwner)
     .order("name", { ascending: true });
 
   if (error) throw error;
-  state.retailers = data || [];
-  renderRetailerControls();
+  state.rivenditores = data || [];
+  renderRivenditoreControls();
 }
 
 async function loadRows() {
+  if (!state.currentOwner) {
+    state.rows = [];
+    renderCategoryOptions();
+    applyFilters();
+    return;
+  }
+
   const { data, error } = await supabaseClient
     .from("listino_prezzi_raw")
     .select(`
@@ -495,17 +741,19 @@ async function loadRows() {
       retailer_id,
       categoria,
       prezzo,
-      created_at
+      created_at,
+      owner
     `)
+    .eq("owner", state.currentOwner)
     .order("created_at", { ascending: false })
     .limit(1000);
 
   if (error) throw error;
 
-  const retailerMap = new Map(state.retailers.map((retailer) => [String(retailer.id), retailer.name]));
+  const rivenditoreMap = new Map(state.rivenditores.map((rivenditore) => [String(rivenditore.id), rivenditore.name]));
   state.rows = (data || []).map((row) => ({
     ...row,
-    retailer_name: retailerMap.get(String(row.retailer_id)) || "-"
+    rivenditore_name: rivenditoreMap.get(String(row.retailer_id)) || "-"
   }));
 
   if (state.editingRowId && !findRowById(state.editingRowId)) {
@@ -517,9 +765,17 @@ async function loadRows() {
 }
 
 async function refreshData() {
+  if (!state.currentOwner) {
+    showTableMessage("Seleziona un owner per caricare il listino.");
+    if (elements.tableCounter) {
+      elements.tableCounter.textContent = "owner richiesto";
+    }
+    return;
+  }
+
   clearFeedback();
   try {
-    await loadRetailers();
+    await loadRivenditores();
     await loadRows();
   } catch (error) {
     showTableMessage(`Errore nel caricamento dati: ${error.message}`);
@@ -527,72 +783,124 @@ async function refreshData() {
   }
 }
 
-async function resolveRetailerForSubmit() {
-  const newRetailerName = String(state.retailerSearchTerm || "").trim();
-  if (newRetailerName) {
-    const existingRetailer = findRetailerByName(newRetailerName);
-    if (existingRetailer) {
-      state.retailerSearchTerm = "";
-      setFormRetailerSelection(existingRetailer.id);
+async function resolveRivenditoreForSubmit() {
+  if (!state.currentOwner) {
+    throw new Error("Seleziona prima un owner.");
+  }
+
+  const newRivenditoreName = String(state.rivenditoreSearchTerm || "").trim();
+  if (newRivenditoreName) {
+    const existingRivenditore = findRivenditoreByName(newRivenditoreName);
+    if (existingRivenditore) {
+      state.rivenditoreSearchTerm = "";
+      setFormRivenditoreSelection(existingRivenditore.id);
       return {
-        retailerId: Number(existingRetailer.id),
-        retailerName: existingRetailer.name,
+        rivenditoreId: Number(existingRivenditore.id),
+        rivenditoreName: existingRivenditore.name,
         created: false
       };
     }
 
-    const hasPartialRetailers = state.retailers.some((retailer) => retailer.name.toLowerCase().includes(newRetailerName.toLowerCase()));
-    if (hasPartialRetailers) {
-      throw new Error("Seleziona un retailer dalla lista oppure continua a digitare fino a non trovare risultati.");
+    const hasPartialRivenditores = state.rivenditores.some((rivenditore) => rivenditore.name.toLowerCase().includes(newRivenditoreName.toLowerCase()));
+    if (hasPartialRivenditores) {
+      throw new Error("Seleziona un rivenditore dalla lista oppure continua a digitare fino a non trovare risultati.");
     }
 
     const { data, error } = await supabaseClient
       .from("retailers")
-      .insert([{ name: newRetailerName }])
+      .insert([{ name: newRivenditoreName, owner: state.currentOwner }])
       .select("id, name")
       .single();
 
     if (error) {
-      throw new Error(`Creazione retailer fallita: ${error.message}`);
+      throw new Error(`Creazione rivenditore fallita: ${error.message}`);
     }
 
-    await loadRetailers();
-    state.retailerSearchTerm = "";
-    setFormRetailerSelection(data.id);
+    await loadRivenditores();
+    state.rivenditoreSearchTerm = "";
+    setFormRivenditoreSelection(data.id);
     return {
-      retailerId: Number(data.id),
-      retailerName: data.name,
+      rivenditoreId: Number(data.id),
+      rivenditoreName: data.name,
       created: true
     };
   }
 
-  const selectedRetailerId = Number(state.formRetailerId || elements.retailerHiddenInput.value);
-  if (!selectedRetailerId) {
+  const selectedRivenditoreId = Number(state.formRivenditoreId || elements.rivenditoreHiddenInput.value);
+  if (!selectedRivenditoreId) {
     return {
-      retailerId: null,
-      retailerName: null,
+      rivenditoreId: null,
+      rivenditoreName: null,
       created: false
     };
   }
 
-  const retailer = state.retailers.find((item) => String(item.id) === String(selectedRetailerId));
+  const rivenditore = state.rivenditores.find((item) => String(item.id) === String(selectedRivenditoreId));
   return {
-    retailerId: selectedRetailerId,
-    retailerName: retailer?.name || null,
+    rivenditoreId: selectedRivenditoreId,
+    rivenditoreName: rivenditore?.name || null,
     created: false
   };
 }
 
-async function testRetailersQuery() {
+function resolveCategoryForSubmit() {
+  const searchValue = String(state.categorySearchTerm || "").trim();
+  if (searchValue) {
+    const categories = buildCategoryList();
+    const exactCategory = categories.find((category) => category.toLowerCase() === searchValue.toLowerCase());
+    if (exactCategory) {
+      state.categorySearchTerm = "";
+      setFormCategorySelection(exactCategory);
+      return exactCategory;
+    }
+
+    const hasPartialCategories = categories.some((category) => category.toLowerCase().includes(searchValue.toLowerCase()));
+    if (hasPartialCategories) {
+      throw new Error("Seleziona una categoria dalla lista oppure continua a digitare fino a non trovare risultati.");
+    }
+
+    return searchValue || null;
+  }
+
+  return String(state.formCategoryValue || elements.categoryHiddenInput.value || "").trim() || null;
+}
+
+async function applyOwnerSelection(owner, options = {}) {
+  const canonicalOwner = findCanonicalOwner(owner);
+  if (!canonicalOwner) {
+    setOwnerStatus("Seleziona un owner valido dalla lista.", "error");
+    return;
+  }
+
+  state.currentOwner = canonicalOwner;
+  cacheOwner(canonicalOwner);
+  state.selectedRivenditoreByProduct = {};
+  setPriceFormMode("create");
+  renderOwnerSelect();
+  setOwnerStatus(`Owner attivo: ${canonicalOwner}.`, "neutral");
+  await refreshData();
+
+  if (!options.silent) {
+    showFeedback(`Owner attivo: ${canonicalOwner}.`);
+  }
+}
+
+async function testRivenditoresQuery() {
   if (!supabaseClient) {
     throw new Error("Client Supabase non inizializzato.");
   }
 
-  return supabaseClient
+  let query = supabaseClient
     .from("retailers")
-    .select("id, name")
+    .select("id, name, owner")
     .order("name", { ascending: true })
     .limit(5);
+
+  if (state.currentOwner) {
+    query = query.eq("owner", state.currentOwner);
+  }
+
+  return query;
 }
 
 async function testRowsQuery() {
@@ -600,41 +908,56 @@ async function testRowsQuery() {
     throw new Error("Client Supabase non inizializzato.");
   }
 
-  return supabaseClient
+  let query = supabaseClient
     .from("listino_prezzi_raw")
-    .select("id, prodotto, retailer_id, categoria, prezzo, created_at")
+    .select("id, prodotto, retailer_id, categoria, prezzo, created_at, owner")
     .order("created_at", { ascending: false })
     .limit(5);
+
+  if (state.currentOwner) {
+    query = query.eq("owner", state.currentOwner);
+  }
+
+  return query;
 }
 
 async function handlePriceSubmit(event) {
   event.preventDefault();
   clearFeedback();
 
+  if (!state.currentOwner) {
+    showFeedback("Seleziona prima un owner.", "error");
+    setOwnerStatus("Seleziona prima un owner.", "error");
+    elements.ownerSelect?.focus();
+    return;
+  }
+
   const formData = new FormData(event.currentTarget);
   const prodotto = String(formData.get("prodotto") || "").trim();
-  const categoria = String(formData.get("categoria") || "").trim() || null;
   const prezzo = String(formData.get("prezzo") || "").trim();
-  let retailerInfo;
+  let rivenditoreInfo;
+  let categoria;
 
   try {
-    retailerInfo = await resolveRetailerForSubmit();
+    rivenditoreInfo = await resolveRivenditoreForSubmit();
+    categoria = resolveCategoryForSubmit();
   } catch (error) {
     showFeedback(error.message, "error");
     return;
   }
 
-  const retailerId = retailerInfo.retailerId;
+  const rivenditoreId = rivenditoreInfo.rivenditoreId;
 
-  if (!prodotto || !retailerId || !prezzo) {
-    showFeedback("Compila prodotto, retailer e prezzo.", "error");
+  if (!prodotto || !rivenditoreId || !prezzo) {
+    showFeedback("Compila prodotto, rivenditore e prezzo.", "error");
     return;
   }
 
   const parsedPrice = parsePriceText(prezzo);
   const payload = {
+    owner: state.currentOwner,
     prodotto,
-    retailer_id: retailerId,
+    retailer_id: rivenditoreId,
     categoria,
     prezzo,
     prezzo_valore: parsedPrice.value,
@@ -647,7 +970,8 @@ async function handlePriceSubmit(event) {
     const { error } = await supabaseClient
       .from("listino_prezzi_raw")
       .update(payload)
-      .eq("id", editingRowId);
+      .eq("id", editingRowId)
+      .eq("owner", state.currentOwner);
 
     if (error) {
       showFeedback(`Aggiornamento riga fallito: ${error.message}`, "error");
@@ -655,14 +979,14 @@ async function handlePriceSubmit(event) {
     }
 
     if (previousRow && previousRow.prodotto !== prodotto) {
-      delete state.selectedRetailerByProduct[previousRow.prodotto];
+      delete state.selectedRivenditoreByProduct[previousRow.prodotto];
     }
 
-    state.selectedRetailerByProduct[prodotto] = String(retailerId);
+    state.selectedRivenditoreByProduct[prodotto] = String(rivenditoreId);
     setPriceFormMode("create");
     await refreshData();
-    showFeedback(retailerInfo.created
-      ? `Retailer "${retailerInfo.retailerName}" creato e riga listino aggiornata.`
+    showFeedback(rivenditoreInfo.created
+      ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino aggiornata.`
       : "Riga listino aggiornata con successo.");
     return;
   }
@@ -676,11 +1000,11 @@ async function handlePriceSubmit(event) {
     return;
   }
 
-  state.selectedRetailerByProduct[prodotto] = String(retailerId);
+  state.selectedRivenditoreByProduct[prodotto] = String(rivenditoreId);
   setPriceFormMode("create");
   await loadRows();
-  showFeedback(retailerInfo.created
-    ? `Retailer "${retailerInfo.retailerName}" creato e riga listino salvata.`
+  showFeedback(rivenditoreInfo.created
+    ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino salvata.`
     : "Riga listino salvata con successo.");
 }
 
@@ -689,44 +1013,85 @@ function handleCancelEdit() {
   setPriceFormMode("create");
 }
 
-function handleRetailerDropdownToggle() {
-  if (state.retailerDropdownOpen) {
-    closeRetailerDropdown();
+function handleRivenditoreDropdownToggle() {
+  if (state.rivenditoreDropdownOpen) {
+    closeRivenditoreDropdown();
     return;
   }
 
-  openRetailerDropdown();
+  openRivenditoreDropdown();
 }
 
-function handleRetailerDropdownSearch(event) {
-  state.retailerSearchTerm = String(event.target.value || "").trim();
-  if (state.retailerSearchTerm) {
-    state.formRetailerId = "";
-    elements.retailerHiddenInput.value = "";
+function handleRivenditoreDropdownSearch(event) {
+  state.rivenditoreSearchTerm = String(event.target.value || "").trim();
+  if (state.rivenditoreSearchTerm) {
+    state.formRivenditoreId = "";
+    elements.rivenditoreHiddenInput.value = "";
   }
-  renderRetailerList();
+  renderRivenditoreList();
 }
 
-function handleRetailerDropdownOptionClick(event) {
+function handleRivenditoreDropdownOptionClick(event) {
   const target = event.target;
   if (!(target instanceof Element)) {
     return;
   }
 
-  const button = target.closest("button[data-retailer-id]");
+  const button = target.closest("button[data-rivenditore-id]");
   if (!(button instanceof HTMLButtonElement)) {
     return;
   }
 
-  const retailerId = button.dataset.retailerId;
-  if (!retailerId) {
+  const rivenditoreId = button.dataset.rivenditoreId;
+  if (!rivenditoreId) {
     return;
   }
 
-  state.retailerSearchTerm = "";
-  elements.retailerDropdownSearch.value = "";
-  setFormRetailerSelection(retailerId);
-  closeRetailerDropdown();
+  state.rivenditoreSearchTerm = "";
+  elements.rivenditoreDropdownSearch.value = "";
+  setFormRivenditoreSelection(rivenditoreId);
+  closeRivenditoreDropdown();
+}
+
+function handleCategoryDropdownToggle() {
+  if (state.categoryDropdownOpen) {
+    closeCategoryDropdown();
+    return;
+  }
+
+  openCategoryDropdown();
+}
+
+function handleCategoryDropdownSearch(event) {
+  state.categorySearchTerm = String(event.target.value || "").trim();
+  if (state.categorySearchTerm) {
+    state.formCategoryValue = "";
+    elements.categoryHiddenInput.value = "";
+  }
+  renderCategoryList();
+}
+
+function handleCategoryDropdownOptionClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const button = target.closest("button[data-category-value]");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const categoryValue = button.dataset.categoryValue || "";
+  state.categorySearchTerm = "";
+  elements.categoryDropdownSearch.value = "";
+  setFormCategorySelection(categoryValue);
+  closeCategoryDropdown();
+}
+
+function handleAdvancedToggle() {
+  state.advancedFiltersOpen = !state.advancedFiltersOpen;
+  renderAdvancedFilters();
 }
 
 function handleDocumentClick(event) {
@@ -735,20 +1100,24 @@ function handleDocumentClick(event) {
     return;
   }
 
-  if (!elements.retailerDropdown.contains(target)) {
-    closeRetailerDropdown();
+  if (elements.rivenditoreDropdown && !elements.rivenditoreDropdown.contains(target)) {
+    closeRivenditoreDropdown();
+  }
+  if (elements.categoryDropdown && !elements.categoryDropdown.contains(target)) {
+    closeCategoryDropdown();
   }
 }
 
 function handleDocumentKeydown(event) {
   if (event.key === "Escape") {
-    closeRetailerDropdown();
+    closeRivenditoreDropdown();
+    closeCategoryDropdown();
   }
 }
 
-function handleRowRetailerChange(event) {
+function handleRowRivenditoreChange(event) {
   const target = event.target;
-  if (!(target instanceof HTMLSelectElement) || !target.classList.contains("row-retailer-select")) {
+  if (!(target instanceof HTMLSelectElement) || !target.classList.contains("row-rivenditore-select")) {
     return;
   }
 
@@ -757,12 +1126,17 @@ function handleRowRetailerChange(event) {
     return;
   }
 
-  state.selectedRetailerByProduct[product] = target.value;
+  state.selectedRivenditoreByProduct[product] = target.value;
   applyFilters();
 }
 
 async function handleDeleteRow(rowId) {
   clearFeedback();
+
+  if (!state.currentOwner) {
+    showFeedback("Seleziona prima un owner.", "error");
+    return;
+  }
 
   const row = findRowById(rowId);
   if (!row) {
@@ -770,7 +1144,7 @@ async function handleDeleteRow(rowId) {
     return;
   }
 
-  const confirmMessage = `Vuoi cancellare "${row.prodotto}" per "${row.retailer_name}"?`;
+  const confirmMessage = `Vuoi cancellare "${row.prodotto}" per "${row.rivenditore_name}"?`;
   if (!window.confirm(confirmMessage)) {
     return;
   }
@@ -778,20 +1152,21 @@ async function handleDeleteRow(rowId) {
   const { error } = await supabaseClient
     .from("listino_prezzi_raw")
     .delete()
-    .eq("id", rowId);
+    .eq("id", rowId)
+    .eq("owner", state.currentOwner);
 
   if (error) {
     showFeedback(`Cancellazione fallita: ${error.message}`, "error");
     return;
   }
 
-  delete state.selectedRetailerByProduct[row.prodotto];
+  delete state.selectedRivenditoreByProduct[row.prodotto];
   if (String(state.editingRowId) === String(rowId)) {
     setPriceFormMode("create");
   }
 
   await refreshData();
-  showFeedback(`Riga "${row.prodotto}" per "${row.retailer_name}" cancellata.`);
+  showFeedback(`Riga "${row.prodotto}" per "${row.rivenditore_name}" cancellata.`);
 }
 
 async function handleRowActionClick(event) {
@@ -818,7 +1193,7 @@ async function handleRowActionClick(event) {
     }
 
     setPriceFormMode("edit", row);
-    elements.priceForm.scrollIntoView({ behavior: "smooth", block: "start" });
+    (elements.entryRow || elements.priceSubmitButton)?.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
 
@@ -827,20 +1202,45 @@ async function handleRowActionClick(event) {
   }
 }
 
+function handleOwnerSelectChange(event) {
+  const selectedOwner = findCanonicalOwner(event.target.value);
+  if (!selectedOwner) {
+    clearCurrentOwner();
+    return;
+  }
+  setOwnerStatus(`Caricamento dati per ${selectedOwner}...`, "neutral");
+
+  applyOwnerSelection(selectedOwner, { silent: true }).catch((error) => {
+    setOwnerStatus(`Errore nel caricamento owner: ${error.message}`, "error");
+    showFeedback(`Errore nel caricamento owner: ${error.message}`, "error");
+    if (state.currentOwner) {
+      setSelectValue(elements.ownerSelect, state.currentOwner);
+      return;
+    }
+    setSelectValue(elements.ownerSelect, "");
+    clearCurrentOwner();
+  });
+}
+
 function bindEvents() {
+  elements.ownerSelect.addEventListener("change", handleOwnerSelectChange);
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceCancelButton.addEventListener("click", handleCancelEdit);
+  elements.advancedToggleButton.addEventListener("click", handleAdvancedToggle);
   elements.refreshButton.addEventListener("click", refreshData);
-  elements.retailerDropdownButton.addEventListener("click", handleRetailerDropdownToggle);
-  elements.retailerDropdownSearch.addEventListener("input", handleRetailerDropdownSearch);
-  elements.retailerDropdownOptions.addEventListener("click", handleRetailerDropdownOptionClick);
-  elements.rowsBody.addEventListener("change", handleRowRetailerChange);
+  elements.rivenditoreDropdownButton.addEventListener("click", handleRivenditoreDropdownToggle);
+  elements.rivenditoreDropdownSearch.addEventListener("input", handleRivenditoreDropdownSearch);
+  elements.rivenditoreDropdownOptions.addEventListener("click", handleRivenditoreDropdownOptionClick);
+  elements.categoryDropdownButton.addEventListener("click", handleCategoryDropdownToggle);
+  elements.categoryDropdownSearch.addEventListener("input", handleCategoryDropdownSearch);
+  elements.categoryDropdownOptions.addEventListener("click", handleCategoryDropdownOptionClick);
+  elements.rowsBody.addEventListener("change", handleRowRivenditoreChange);
   elements.rowsBody.addEventListener("click", handleRowActionClick);
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("keydown", handleDocumentKeydown);
 
   elements.searchInput.addEventListener("input", applyFilters);
-  elements.retailerFilter.addEventListener("change", applyFilters);
+  elements.rivenditoreFilter.addEventListener("change", applyFilters);
   elements.categoryFilter.addEventListener("change", applyFilters);
 }
 
@@ -848,14 +1248,33 @@ async function bootstrap() {
   try {
     supabaseClient = createSupabaseClient();
     window.listinoDebug = {
-      testRetailersQuery,
+      getCurrentOwner: () => state.currentOwner,
+      loadOwnerOptions,
+      testRivenditoresQuery,
       testRowsQuery,
       refreshData
     };
     bindEvents();
-    await refreshData();
+    renderAdvancedFilters();
+    await loadOwnerOptions();
+
+    if (!state.ownerOptions.length) {
+      showFatal("Nessun owner trovato nel database.");
+      setOwnerStatus("Nessun owner trovato nel database.", "error");
+      return;
+    }
+
+    const cachedOwner = getCachedOwner();
+    if (isKnownOwner(cachedOwner)) {
+      await applyOwnerSelection(cachedOwner, { silent: true });
+      return;
+    }
+
+    setSelectValue(elements.ownerSelect, "");
+    clearCurrentOwner();
   } catch (error) {
     showFatal(`Avvio app fallito: ${error.message}`);
+    setOwnerStatus(`Avvio app fallito: ${error.message}`, "error");
   }
 }
 

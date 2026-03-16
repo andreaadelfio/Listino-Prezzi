@@ -5,7 +5,7 @@ App minimale pensata per:
 - essere ospitata su GitHub Pages
 - leggere e scrivere dati su Supabase
 - rispettare la struttura del foglio `Listino Prezzi raw`
-- permettere l'inserimento di nuovi retailer e nuove righe dal telefono
+- permettere l'inserimento di nuovi rivenditore e nuove righe dal telefono
 - funzionare senza login
 
 ## Architettura
@@ -18,7 +18,7 @@ App minimale pensata per:
 
 Tabelle principali:
 
-- `retailers`
+- `rivenditores`
 - `listino_prezzi_raw`
 
 View di supporto:

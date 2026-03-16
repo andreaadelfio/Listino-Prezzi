@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Listino Prezzi Raw</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./assets/styles.css?v=20260316-17">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260316-23">
   </head>
   <body>
     <div class="page-shell">
@@ -13,105 +13,28 @@
         <div class="hero-copy">
           <h1>Listino Prezzi</h1>
         </div>
+        <div class="hero-meta">
+          <div class="owner-inline">
+            <label class="field owner-field">
+              <span>Owner</span>
+              <select id="owner-select" disabled>
+                <option value="">Caricamento owner...</option>
+              </select>
+            </label>
+            <p id="owner-status" class="field-help owner-inline-status">Caricamento owner dal database...</p>
+          </div>
+        </div>
       </header>
 
       <main class="main-grid">
         <section class="panel panel-wide">
           <div class="panel-head">
-            <div>
-              <p class="eyebrow">Filtri</p>
-              <h2>Esplora il listino</h2>
-            </div>
-          </div>
-
-          <div class="filter-grid">
-            <label class="field">
-              <span>Cerca prodotto o prezzo</span>
-              <input id="search-input" type="search" placeholder="Es. avena, kg, 2.9">
-            </label>
-
-            <label class="field">
-              <span>Retailer</span>
-              <select id="retailer-filter">
-                <option value="">Tutti</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Categoria</span>
-              <select id="category-filter">
-                <option value="">Tutte</option>
-              </select>
-            </label>
-          </div>
-        </section>
-
-        <section class="panel panel-wide">
-          <div class="panel-head">
-            <div>
-              <p id="price-form-eyebrow" class="eyebrow">Nuova riga</p>
-              <h2 id="price-form-title">Inserisci voce listino raw</h2>
-            </div>
-          </div>
-
-          <form id="price-form" class="form-grid">
-            <label class="field">
-              <span>Prodotto</span>
-              <input name="prodotto" type="text" placeholder="Es. Avena" required>
-            </label>
-
-            <label class="field">
-              <span>Retailer</span>
-              <div class="retailer-picker">
-                <input id="retailer-hidden-input" name="retailer_id" type="hidden">
-                <div id="retailer-dropdown" class="custom-dropdown">
-                  <button
-                    id="retailer-dropdown-button"
-                    class="custom-dropdown-trigger"
-                    type="button"
-                    aria-haspopup="listbox"
-                    aria-expanded="false"
-                  >
-                    <span id="retailer-dropdown-label">Seleziona retailer</span>
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M7 10l5 5 5-5z"/>
-                    </svg>
-                  </button>
-                  <div id="retailer-dropdown-panel" class="custom-dropdown-panel hidden">
-                    <input id="retailer-dropdown-search" type="search" placeholder="Cerca o crea retailer">
-                    <div id="retailer-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Retailer disponibili"></div>
-                  </div>
-                </div>
-                <p class="field-help">Se la ricerca non trova nulla, il testo digitato verra creato quando salvi la riga.</p>
-              </div>
-            </label>
-
-            <label class="field">
-              <span>Categoria</span>
-              <select id="price-category-select" name="categoria">
-                <option value="">Seleziona categoria</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Prezzo</span>
-              <input name="prezzo" type="text" placeholder="Es. 1EUR/l oppure 7.35EUR/kg" required>
-            </label>
-
-            <div class="form-actions">
-              <div class="form-button-row">
-                <button id="price-submit-button" class="primary-button" type="submit">Salva riga</button>
-                <button id="price-cancel-button" class="secondary-button hidden" type="button">Annulla modifica</button>
-              </div>
-              <p id="price-form-note" class="form-note">La combinazione prodotto-retailer viene gestita automaticamente.</p>
-            </div>
-          </form>
-        </section>
-
-        <section class="panel panel-wide">
-          <div class="panel-head">
             <div class="panel-title-row">
-              <p class="eyebrow">Listino Prezzi</p>
+              <div>
+                <p class="eyebrow">Listino Prezzi</p>
+                <h2>Ricerca e inserimento nella tabella</h2>
+              </div>
+              <div id="feedback" class="feedback feedback-inline hidden"></div>
             </div>
             <div class="table-toolbar">
               <button id="refresh-button" class="icon-button" type="button" aria-label="Aggiorna listino" title="Aggiorna listino">
@@ -122,6 +45,41 @@
               <span id="table-counter" class="pill">0 prodotti</span>
             </div>
           </div>
+
+          <div class="table-controls">
+            <div class="table-search-row">
+              <label class="field table-search-field">
+                <span>Ricerca</span>
+                <input id="search-input" type="search" placeholder="Cerca in tutto: prodotto, rivenditore, categoria, prezzo">
+              </label>
+              <button
+                id="advanced-toggle-button"
+                class="secondary-button advanced-toggle-button"
+                type="button"
+                aria-expanded="false"
+              >
+                Advanced
+              </button>
+            </div>
+
+            <div id="advanced-filters" class="advanced-filters hidden">
+              <label class="field">
+                <span>Rivenditore</span>
+                <select id="rivenditore-filter">
+                  <option value="">Tutti</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Categoria</span>
+                <select id="category-filter">
+                  <option value="">Tutte</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <form id="price-form"></form>
 
           <div class="table-wrap">
             <table>
@@ -134,6 +92,70 @@
                   <th>Azioni</th>
                 </tr>
               </thead>
+              <tbody class="entry-body">
+                <tr id="entry-row" class="entry-row">
+                  <td>
+                    <input form="price-form" name="prodotto" type="text" placeholder="Es. Avena" required>
+                  </td>
+                  <td>
+                    <div class="rivenditore-picker">
+                      <input id="rivenditore-hidden-input" name="retailer_id" type="hidden" form="price-form">
+                      <div id="rivenditore-dropdown" class="custom-dropdown">
+                        <button
+                          id="rivenditore-dropdown-button"
+                          class="custom-dropdown-trigger"
+                          type="button"
+                          aria-haspopup="listbox"
+                          aria-expanded="false"
+                        >
+                          <span id="rivenditore-dropdown-label">Rivenditore</span>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 10l5 5 5-5z"/>
+                          </svg>
+                        </button>
+                        <div id="rivenditore-dropdown-panel" class="custom-dropdown-panel hidden">
+                          <input id="rivenditore-dropdown-search" type="search" placeholder="Cerca o crea rivenditore">
+                          <div id="rivenditore-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Rivenditore disponibili"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="category-picker">
+                      <input id="category-hidden-input" name="categoria" type="hidden" form="price-form">
+                      <div id="category-dropdown" class="custom-dropdown">
+                        <button
+                          id="category-dropdown-button"
+                          class="custom-dropdown-trigger"
+                          type="button"
+                          aria-haspopup="listbox"
+                          aria-expanded="false"
+                        >
+                          <span id="category-dropdown-label">Categoria</span>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 10l5 5 5-5z"/>
+                          </svg>
+                        </button>
+                        <div id="category-dropdown-panel" class="custom-dropdown-panel hidden">
+                          <input id="category-dropdown-search" type="search" placeholder="Cerca o crea categoria">
+                          <div id="category-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Categorie disponibili"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <input form="price-form" name="prezzo" type="text" placeholder="Es. 1EUR/l o 7.35EUR/kg" required>
+                  </td>
+                  <td class="entry-actions-cell">
+                    <div class="entry-actions">
+                      <div class="entry-button-row">
+                        <button id="price-submit-button" class="primary-button compact-button" type="submit" form="price-form">Salva</button>
+                        <button id="price-cancel-button" class="secondary-button compact-button hidden" type="button">Annulla</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
               <tbody id="rows-body">
                 <tr>
                   <td colspan="5">Caricamento...</td>
@@ -146,7 +168,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./assets/config.js?v=20260316-17"></script>
-    <script src="./assets/app.js?v=20260316-17"></script>
+    <script src="./assets/config.js?v=20260316-23"></script>
+    <script src="./assets/app.js?v=20260316-23"></script>
   </body>
 </html>

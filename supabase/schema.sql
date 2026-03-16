@@ -34,13 +34,13 @@ create table if not exists public.listino_prezzi_raw (
 alter table public.listino_prezzi_raw
 drop column if exists is_new;
 
-create index if not exists idx_retailers_name on public.retailers(name);
+create index if not exists idx_rivenditores_name on public.retailers(name);
 create index if not exists idx_listino_prodotto on public.listino_prezzi_raw(prodotto);
 create index if not exists idx_listino_categoria on public.listino_prezzi_raw(categoria);
-create index if not exists idx_listino_retailer on public.listino_prezzi_raw(retailer_id);
+create index if not exists idx_listino_rivenditore on public.listino_prezzi_raw(retailer_id);
 
-drop trigger if exists trg_retailers_updated_at on public.retailers;
-create trigger trg_retailers_updated_at
+drop trigger if exists trg_rivenditores_updated_at on public.retailers;
+create trigger trg_rivenditores_updated_at
 before update on public.retailers
 for each row execute function public.set_updated_at();
 
@@ -67,30 +67,30 @@ join public.retailers r on r.id = l.retailer_id;
 alter table public.retailers enable row level security;
 alter table public.listino_prezzi_raw enable row level security;
 
-drop policy if exists "public can read retailers" on public.retailers;
-create policy "public can read retailers"
+drop policy if exists "public can read rivenditores" on public.retailers;
+create policy "public can read rivenditores"
 on public.retailers
 for select
 to anon, authenticated
 using (true);
 
-drop policy if exists "public can insert retailers" on public.retailers;
-create policy "public can insert retailers"
+drop policy if exists "public can insert rivenditores" on public.retailers;
+create policy "public can insert rivenditores"
 on public.retailers
 for insert
 to anon, authenticated
 with check (true);
 
-drop policy if exists "public can update retailers" on public.retailers;
-create policy "public can update retailers"
+drop policy if exists "public can update rivenditores" on public.retailers;
+create policy "public can update rivenditores"
 on public.retailers
 for update
 to anon, authenticated
 using (true)
 with check (true);
 
-drop policy if exists "public can delete retailers" on public.retailers;
-create policy "public can delete retailers"
+drop policy if exists "public can delete rivenditores" on public.retailers;
+create policy "public can delete rivenditores"
 on public.retailers
 for delete
 to anon, authenticated
