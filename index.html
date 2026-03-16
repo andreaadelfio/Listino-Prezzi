@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Listino Prezzi Raw</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./assets/styles.css?v=20260316-39">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260316-43">
   </head>
   <body>
     <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
@@ -51,12 +51,12 @@
       <main class="main-grid">
         <section id="selected-rows-box" class="selection-box selection-panel panel-wide hidden" aria-live="polite">
           <div class="selection-box-head">
-            <div>
+            <div class="selection-box-title">
               <p class="eyebrow">Selezionati</p>
+              <button id="selected-rows-copy-button" class="secondary-button compact-button" type="button">Copia</button>
             </div>
             <div class="selection-box-actions">
               <span id="selected-rows-count" class="pill">0 selezionati</span>
-              <button id="selected-rows-copy-button" class="secondary-button compact-button" type="button">Copia</button>
             </div>
           </div>
           <pre id="selected-rows-list" class="selection-plain-list"></pre>
@@ -212,7 +212,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./assets/config.js?v=20260316-39"></script>
-    <script src="./assets/app.js?v=20260316-39"></script>
+    <script src="./assets/config.js?v=20260316-43"></script>
+    <script src="./assets/app.js?v=20260316-43"></script>
   </body>
 </html>

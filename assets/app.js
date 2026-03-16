@@ -1,7 +1,16 @@
-const APP_VERSION = "20260316-39";
+const APP_VERSION = "20260316-43";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
+const CHECKED_PRODUCTS_CACHE_KEY = "listino-checked-products-cache";
+const SESSION_URL_PARAM_KEYS = Object.freeze({
+  owner: "o",
+  search: "q",
+  retailerFilter: "rf",
+  categoryFilter: "cf",
+  advancedFilters: "af",
+  selectedRows: "sel"
+});
 const ALPHABET_INDEX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 window.__listinoVersion = APP_VERSION;
 
@@ -22,7 +31,8 @@ const state = {
   formCategoryValue: "",
   categoryDropdownOpen: false,
   categorySearchTerm: "",
-  advancedFiltersOpen: false
+  advancedFiltersOpen: false,
+  urlSyncPaused: false
 };
 
 let feedbackHideTimeoutId = null;
@@ -250,6 +260,193 @@ function cacheOwner(owner) {
   }
 }
 
+function getCheckedProductsCacheMap() {
+  try {
+    const rawValue = window.localStorage.getItem(CHECKED_PRODUCTS_CACHE_KEY);
+    if (!rawValue) {
+      return {};
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+    if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
+      return {};
+    }
+
+    return parsedValue;
+  } catch {
+    return {};
+  }
+}
+
+function writeCheckedProductsCacheMap(cacheMap) {
+  try {
+    if (!cacheMap || !Object.keys(cacheMap).length) {
+      window.localStorage.removeItem(CHECKED_PRODUCTS_CACHE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(CHECKED_PRODUCTS_CACHE_KEY, JSON.stringify(cacheMap));
+  } catch {
+    // Ignora eventuali limiti del browser sullo storage.
+  }
+}
+
+function restoreCheckedProductsForOwner(owner = state.currentOwner) {
+  const normalizedOwnerKey = normalizeOwnerKey(owner);
+  if (!normalizedOwnerKey) {
+    state.checkedProducts = {};
+    return;
+  }
+
+  const cacheMap = getCheckedProductsCacheMap();
+  const cachedProducts = Array.isArray(cacheMap[normalizedOwnerKey]) ? cacheMap[normalizedOwnerKey] : [];
+  state.checkedProducts = Object.fromEntries(
+    cachedProducts
+      .map((product) => String(product || "").trim())
+      .filter(Boolean)
+      .map((product) => [product, true])
+  );
+}
+
+function persistCheckedProductsForOwner(owner = state.currentOwner) {
+  const normalizedOwnerKey = normalizeOwnerKey(owner);
+  if (!normalizedOwnerKey) {
+    return;
+  }
+
+  const cacheMap = getCheckedProductsCacheMap();
+  const checkedProducts = Object.keys(state.checkedProducts)
+    .filter((product) => state.checkedProducts[product])
+    .sort((a, b) => a.localeCompare(b, "it"));
+
+  if (checkedProducts.length) {
+    cacheMap[normalizedOwnerKey] = checkedProducts;
+  } else {
+    delete cacheMap[normalizedOwnerKey];
+  }
+
+  writeCheckedProductsCacheMap(cacheMap);
+}
+
+async function withUrlSyncPaused(callback) {
+  const previousValue = state.urlSyncPaused;
+  state.urlSyncPaused = true;
+  try {
+    return await callback();
+  } finally {
+    state.urlSyncPaused = previousValue;
+  }
+}
+
+function encodeSelectedRowsForUrl(selectedItems = getSelectedProductSummaries()) {
+  return selectedItems
+    .map(({ row }) => String(row?.id || "").trim())
+    .filter((rowId) => /^\d+$/.test(rowId))
+    .map((rowId) => Number.parseInt(rowId, 10).toString(36))
+    .join(".");
+}
+
+function decodeSelectedRowsFromUrl(rawValue) {
+  return [...new Set(
+    String(rawValue || "")
+      .split(".")
+      .map((token) => token.trim().toLowerCase())
+      .filter((token) => /^[0-9a-z]+$/.test(token))
+      .map((token) => Number.parseInt(token, 36))
+      .filter((rowId) => Number.isInteger(rowId) && rowId >= 0)
+      .map((rowId) => String(rowId))
+  )];
+}
+
+function readSessionStateFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    owner: normalizeOwnerValue(params.get(SESSION_URL_PARAM_KEYS.owner)),
+    search: String(params.get(SESSION_URL_PARAM_KEYS.search) || "").trim(),
+    retailerFilterId: String(params.get(SESSION_URL_PARAM_KEYS.retailerFilter) || "").trim(),
+    category: String(params.get(SESSION_URL_PARAM_KEYS.categoryFilter) || "").trim(),
+    advancedFiltersOpen: params.get(SESSION_URL_PARAM_KEYS.advancedFilters) === "1",
+    selectedRowIds: decodeSelectedRowsFromUrl(params.get(SESSION_URL_PARAM_KEYS.selectedRows))
+  };
+}
+
+function buildSessionStateForUrl() {
+  return {
+    owner: normalizeOwnerValue(state.currentOwner),
+    search: String(elements.searchInput?.value || "").trim(),
+    retailerFilterId: String(elements.rivenditoreFilter?.value || "").trim(),
+    category: String(elements.categoryFilter?.value || "").trim(),
+    advancedFiltersOpen: Boolean(state.advancedFiltersOpen),
+    selectedRows: encodeSelectedRowsForUrl()
+  };
+}
+
+function syncUrlState() {
+  if (state.urlSyncPaused) {
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  const sessionState = buildSessionStateForUrl();
+  Object.values(SESSION_URL_PARAM_KEYS).forEach((paramKey) => {
+    url.searchParams.delete(paramKey);
+  });
+
+  if (sessionState.owner) {
+    url.searchParams.set(SESSION_URL_PARAM_KEYS.owner, sessionState.owner);
+  }
+  if (sessionState.search) {
+    url.searchParams.set(SESSION_URL_PARAM_KEYS.search, sessionState.search);
+  }
+  if (sessionState.retailerFilterId) {
+    url.searchParams.set(SESSION_URL_PARAM_KEYS.retailerFilter, sessionState.retailerFilterId);
+  }
+  if (sessionState.category) {
+    url.searchParams.set(SESSION_URL_PARAM_KEYS.categoryFilter, sessionState.category);
+  }
+  if (sessionState.advancedFiltersOpen) {
+    url.searchParams.set(SESSION_URL_PARAM_KEYS.advancedFilters, "1");
+  }
+  if (sessionState.selectedRows) {
+    url.searchParams.set(SESSION_URL_PARAM_KEYS.selectedRows, sessionState.selectedRows);
+  }
+
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (nextUrl !== currentUrl) {
+    window.history.replaceState({ listinoSession: sessionState }, "", nextUrl);
+  }
+}
+
+function applySessionStateFromUrl(sessionState) {
+  state.selectedRivenditoreByProduct = {};
+  state.checkedProducts = {};
+
+  if (elements.searchInput) {
+    elements.searchInput.value = sessionState.search || "";
+  }
+
+  setSelectValue(elements.rivenditoreFilter, sessionState.retailerFilterId || "");
+  setSelectValue(elements.categoryFilter, sessionState.category || "");
+
+  state.advancedFiltersOpen = Boolean(sessionState.advancedFiltersOpen);
+  renderAdvancedFilters();
+
+  const rowsById = new Map(state.rows.map((row) => [String(row.id), row]));
+  (sessionState.selectedRowIds || []).forEach((rowId) => {
+    const row = rowsById.get(String(rowId));
+    if (!row) {
+      return;
+    }
+
+    state.selectedRivenditoreByProduct[row.prodotto] = String(row.retailer_id);
+    state.checkedProducts[row.prodotto] = true;
+  });
+
+  persistCheckedProductsForOwner(state.currentOwner);
+  applyFilters({ syncUrl: false });
+}
+
 function createSupabaseClient() {
   if (!window.APP_CONFIG) {
     throw new Error("Configurazione APP_CONFIG non trovata.");
@@ -338,6 +535,7 @@ function syncCheckedProducts() {
   state.checkedProducts = Object.fromEntries(
     Object.entries(state.checkedProducts).filter(([product, checked]) => checked && availableProducts.has(product))
   );
+  persistCheckedProductsForOwner();
 }
 
 function setFormNote(message) {
@@ -526,6 +724,7 @@ function clearCurrentOwner() {
     elements.tableCounter.textContent = "owner richiesto";
   }
   setOwnerStatus("Seleziona un owner per caricare il listino.");
+  syncUrlState();
 }
 
 function setPriceFormMode(mode, row = null) {
@@ -900,7 +1099,8 @@ async function handleSelectedRowsCopy() {
   }
 }
 
-function applyFilters() {
+function applyFilters(options = {}) {
+  const { syncUrl = true } = options;
   const search = elements.searchInput.value.trim().toLowerCase();
   const rivenditoreId = elements.rivenditoreFilter.value;
   const category = elements.categoryFilter.value;
@@ -926,6 +1126,9 @@ function applyFilters() {
   });
 
   renderRows();
+  if (syncUrl) {
+    syncUrlState();
+  }
 }
 
 function renderRows() {
@@ -937,7 +1140,8 @@ function renderRows() {
     return;
   }
 
-  elements.rowsBody.innerHTML = state.filteredProducts.map((group) => {
+  let previousLetter = "";
+  const rowsMarkup = state.filteredProducts.map((group) => {
     const row = group.selectedRow;
     const isChecked = Boolean(state.checkedProducts[group.product]);
     const alphaLetter = getProductAlphabetLetter(group.product);
@@ -947,7 +1151,18 @@ function renderRows() {
       </option>
     `).join("");
 
+    const dividerMarkup = alphaLetter !== previousLetter
+      ? `
+        <tr class="alphabet-divider-row" data-alpha-letter="${alphaLetter}">
+          <td colspan="${TABLE_COLUMN_COUNT}">${escapeHtml(alphaLetter === "#" ? "Altro" : alphaLetter)}</td>
+        </tr>
+      `
+      : "";
+
+    previousLetter = alphaLetter;
+
     return `
+      ${dividerMarkup}
       <tr data-alpha-letter="${alphaLetter}">
         <td class="selection-cell" data-label="Seleziona">
           <input
@@ -997,6 +1212,8 @@ function renderRows() {
       </tr>
     `;
   }).join("");
+
+  elements.rowsBody.innerHTML = rowsMarkup;
 
   elements.tableCounter.textContent = `${state.filteredProducts.length} prodotti`;
   renderAlphabetIndex();
@@ -1226,18 +1443,28 @@ async function applyOwnerSelection(owner, options = {}) {
     return;
   }
 
+  const { syncUrl = true } = options;
+
   const canonicalOwner = ensureOwnerOption(normalizedOwner);
   state.currentOwner = canonicalOwner;
   state.ownerSearchTerm = "";
   cacheOwner(canonicalOwner);
   state.selectedRivenditoreByProduct = {};
-  state.checkedProducts = {};
+  restoreCheckedProductsForOwner(canonicalOwner);
   setPriceFormMode("create");
   renderOwnerSelect();
   renderSelectedRowsBox();
   setOwnerStatus("");
   closeOwnerDropdown();
-  await refreshData();
+  if (syncUrl) {
+    await refreshData();
+    syncUrlState();
+    return;
+  }
+
+  await withUrlSyncPaused(async () => {
+    await refreshData();
+  });
 }
 
 async function testRivenditoresQuery() {
@@ -1340,6 +1567,7 @@ async function handlePriceSubmit(event) {
         if (state.checkedProducts[previousRow.prodotto]) {
           delete state.checkedProducts[previousRow.prodotto];
           state.checkedProducts[prodotto] = true;
+          persistCheckedProductsForOwner();
         }
       }
 
@@ -1515,6 +1743,7 @@ function handleOwnerDropdownOptionClick(event) {
 function handleAdvancedToggle() {
   state.advancedFiltersOpen = !state.advancedFiltersOpen;
   renderAdvancedFilters();
+  syncUrlState();
 }
 
 function handleAlphabetIndexClick(event) {
@@ -1570,7 +1799,9 @@ function handleRowRivenditoreChange(event) {
       delete state.checkedProducts[product];
     }
 
+    persistCheckedProductsForOwner();
     renderSelectedRowsBox();
+    syncUrlState();
     return;
   }
 
@@ -1694,21 +1925,29 @@ function bindEvents() {
 async function bootstrap() {
   showLoadingOverlay("Avvio applicazione...");
   try {
+    const sharedSession = readSessionStateFromUrl();
     supabaseClient = createSupabaseClient();
     window.listinoDebug = {
       getCurrentOwner: () => state.currentOwner,
       loadOwnerOptions,
       testRivenditoresQuery,
       testRowsQuery,
-      refreshData
+      refreshData,
+      getShareUrl: () => window.location.href
     };
     bindEvents();
     renderAdvancedFilters();
     await loadOwnerOptions();
 
-    const cachedOwner = getCachedOwner();
-    if (cachedOwner) {
-      await applyOwnerSelection(cachedOwner, { silent: true });
+    const initialOwner = sharedSession.owner || getCachedOwner();
+    if (initialOwner) {
+      await applyOwnerSelection(initialOwner, { syncUrl: false });
+
+      if (sharedSession.owner) {
+        applySessionStateFromUrl(sharedSession);
+      }
+
+      syncUrlState();
       return;
     }
 

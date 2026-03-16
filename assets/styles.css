@@ -519,6 +519,13 @@ select {
   flex-wrap: wrap;
 }
 
+.selection-box-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
 .selection-box-actions {
   display: flex;
   align-items: center;
@@ -686,6 +693,17 @@ th {
 
 .icon-button-danger {
   color: var(--danger);
+}
+
+.alphabet-divider-row td {
+  padding: 0.5rem 0.9rem;
+  border-bottom: 1px solid rgba(166, 75, 42, 0.14);
+  background: rgba(166, 75, 42, 0.08);
+  color: var(--accent-deep);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .alphabet-jump-target td {
