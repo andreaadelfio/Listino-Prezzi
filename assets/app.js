@@ -1,4 +1,4 @@
-const APP_VERSION = "20260319-17";
+const APP_VERSION = "20260319-24";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
@@ -808,15 +808,16 @@ function renderAlphabetIndex() {
 }
 
 function updateStickyAlphabetMetrics() {
-  const stickyTop = window.innerWidth <= 560 ? 4 : 6;
+  const stickyTop = 6;
   const wrapHeight = elements.alphabetIndexWrap?.offsetHeight || 0;
   const tableHeadHeight = elements.tableHead?.getBoundingClientRect().height || 0;
+  const entryRowHeight = elements.entryRow?.getBoundingClientRect().height || 0;
 
   document.documentElement.style.setProperty("--alphabet-sticky-top", `${stickyTop}px`);
   document.documentElement.style.setProperty("--alphabet-sticky-height", `${wrapHeight}px`);
-  document.documentElement.style.setProperty("--entry-row-sticky-top", `0px`);
+  document.documentElement.style.setProperty("--entry-row-sticky-top", `${tableHeadHeight}px`);
   document.documentElement.style.setProperty("--table-head-sticky-top", `0px`);
-  document.documentElement.style.setProperty("--alphabet-scroll-offset", `${tableHeadHeight + 8}px`);
+  document.documentElement.style.setProperty("--alphabet-scroll-offset", `${tableHeadHeight + entryRowHeight + 8}px`);
 }
 
 function highlightAlphabetTarget(row) {
@@ -1279,32 +1280,18 @@ function renderSelectedRowsBox() {
   }
 
   const selectedItems = getSelectedProductSummaries();
-  const anchorBefore = elements.listinoPanel?.getBoundingClientRect().top ?? null;
-  const wasHidden = elements.selectedRowsBox.classList.contains("hidden");
   if (!selectedItems.length) {
-    if (!wasHidden) {
-      elements.selectedRowsBox.classList.add("hidden");
-    }
+    elements.selectedRowsBox.classList.add("hidden");
     elements.selectedRowsCount.textContent = "0 selezionati";
     elements.selectedRowsList.textContent = "";
     elements.selectedRowsCopyButton.disabled = true;
-    if (!wasHidden && anchorBefore !== null) {
-      const anchorAfter = elements.listinoPanel?.getBoundingClientRect().top ?? anchorBefore;
-      window.scrollBy(0, anchorAfter - anchorBefore);
-    }
     return;
   }
 
   elements.selectedRowsCount.textContent = `${selectedItems.length} selezionat${selectedItems.length === 1 ? "o" : "i"}`;
   elements.selectedRowsList.textContent = buildSelectedRowsClipboardText(selectedItems);
   elements.selectedRowsCopyButton.disabled = false;
-  if (wasHidden) {
-    elements.selectedRowsBox.classList.remove("hidden");
-    if (anchorBefore !== null) {
-      const anchorAfter = elements.listinoPanel?.getBoundingClientRect().top ?? anchorBefore;
-      window.scrollBy(0, anchorAfter - anchorBefore);
-    }
-  }
+  elements.selectedRowsBox.classList.remove("hidden");
 }
 
 async function handleSelectedRowsCopy() {

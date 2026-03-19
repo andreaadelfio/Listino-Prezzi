@@ -454,7 +454,7 @@ select {
 }
 
 .advanced-toggle-button {
-  min-width: 8.5rem;
+  /* min-width: 8.5rem; */
   min-height: 3rem;
   white-space: nowrap;
 }
@@ -515,15 +515,17 @@ select {
 }
 
 .panel-title-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.8rem;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
-.panel-title-block {
-  display: grid;
-  gap: 0.3rem;
+.panel-title-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
@@ -561,13 +563,12 @@ select {
   min-width: 10.5rem;
 }
 
-.panel-title-block .owner-inline-status {
+.panel-title-row .owner-inline-status {
   text-align: left;
 }
 
 .feedback {
-  margin-bottom: 0.9rem;
-  padding: 0.85rem 0.95rem;
+  padding: 0.8rem 0.95rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: rgba(255, 250, 244, 0.92);
@@ -575,9 +576,12 @@ select {
 
 .feedback-inline {
   margin-bottom: 0;
-  padding: 0.55rem 0.75rem;
-  min-height: 2.35rem;
-  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0.8rem 0.95rem;
+  align-self: center;
+  flex: 0 0 auto;
 }
 
 .feedback-content {
@@ -630,6 +634,10 @@ select {
   display: grid;
   gap: 0.75rem;
   padding: 1rem 1.1rem;
+}
+
+.listino-selection-box {
+  margin-top: 1rem;
 }
 
 .selection-plain-list {
@@ -711,8 +719,8 @@ select {
 }
 
 table {
-  width: 100%;
-  min-width: 1090px;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
 }
 
@@ -818,10 +826,14 @@ th {
 }
 
 .entry-row td {
+  position: sticky;
+  top: var(--entry-row-sticky-top);
+  z-index: 4;
   background: var(--surface-strong);
   vertical-align: middle;
   padding-top: 0.8rem;
   padding-bottom: 0.8rem;
+  box-shadow: inset 0 -1px 0 rgba(31, 42, 36, 0.08);
 }
 
 .entry-row input,
@@ -834,7 +846,7 @@ th {
 }
 
 .entry-actions-cell {
-  min-width: 15rem;
+  min-width: 9.5rem;
 }
 
 .entry-actions {
@@ -914,277 +926,4 @@ th {
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-}
-
-@media (max-width: 1080px) {
-  .hero,
-  .main-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .advanced-filters {
-    grid-template-columns: 1fr;
-  }
-
-  .hero-meta {
-    justify-content: flex-start;
-    width: 100%;
-  }
-
-  .owner-inline,
-  .owner-field {
-    min-width: 0;
-    width: 100%;
-  }
-
-  .owner-inline-status {
-    text-align: left;
-  }
-
-  .panel-wide {
-    grid-column: auto;
-  }
-}
-
-@media (max-width: 760px) {
-  .table-search-inline {
-    grid-template-columns: 1fr;
-  }
-
-  .table-search-actions {
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .advanced-toggle-button {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .search-reset-button {
-    width: 100%;
-    min-width: 0;
-  }
-}
-
-@media (max-width: 560px) {
-  .page-shell {
-    width: min(100vw - 0.6rem, 100%);
-    overflow-x: clip;
-  }
-
-  .hero {
-    gap: 0.75rem;
-  }
-
-  h1 {
-    font-size: 1.6rem;
-  }
-
-  h2 {
-    font-size: 1.08rem;
-    line-height: 1.25;
-  }
-
-  .panel {
-    padding: 0.72rem;
-    border-radius: 18px;
-  }
-
-  .eyebrow,
-  .field span {
-    font-size: 0.72rem;
-  }
-
-  input,
-  select,
-  .custom-dropdown-trigger {
-    min-height: 2.65rem;
-    padding: 0.65rem 0.78rem;
-    font-size: 0.96rem;
-  }
-
-  .custom-dropdown-trigger {
-    gap: 0.55rem;
-  }
-
-  .custom-dropdown-trigger svg {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .custom-dropdown-panel {
-    gap: 0.45rem;
-    padding: 0.55rem;
-  }
-
-  .custom-dropdown-panel input {
-    min-height: 2.45rem;
-  }
-
-  .custom-dropdown-option {
-    min-height: 2.35rem;
-    padding: 0.55rem 0.7rem;
-    font-size: 0.93rem;
-  }
-
-  .primary-button,
-  .secondary-button,
-  .compact-button,
-  .advanced-toggle-button {
-    min-height: 2.5rem;
-    padding: 0.58rem 0.82rem;
-    font-size: 0.92rem;
-  }
-
-  .table-search-inline {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.5rem;
-    align-items: center;
-  }
-
-  .table-search-actions {
-    display: inline-flex;
-    width: auto;
-    gap: 0.45rem;
-  }
-
-  .table-search-field input {
-    font-size: 0.92rem;
-  }
-
-  .advanced-filters {
-    grid-template-columns: 1fr;
-  }
-
-  .alphabet-index {
-    gap: 0.28rem;
-  }
-
-  .alphabet-index-wrap {
-    padding-top: 0.35rem;
-    padding-bottom: 0.45rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .alphabet-index-button {
-    width: 1.72rem;
-    min-width: 1.72rem;
-    min-height: 1.72rem;
-    font-size: 0.76rem;
-  }
-
-  .advanced-toggle-button,
-  .compact-button,
-  .search-reset-button {
-    width: auto;
-  }
-
-  .advanced-toggle-button {
-    min-width: 6.3rem;
-    padding-inline: 0.72rem;
-  }
-
-  .selection-box-actions {
-    width: auto;
-    gap: 0.45rem;
-  }
-
-  .entry-button-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-  }
-
-  .pill {
-    padding: 0.34rem 0.65rem;
-    font-size: 0.76rem;
-  }
-
-  .selection-panel {
-    padding: 0.85rem 0.9rem;
-  }
-
-  .selection-plain-list {
-    padding: 0.68rem 0.75rem;
-    font-size: 0.84rem;
-    line-height: 1.45;
-  }
-
-  .table-wrap {
-    border-radius: 10px;
-  }
-
-  table {
-    min-width: 920px;
-  }
-
-  .entry-grid-row {
-    grid-template-columns: 2.45rem minmax(15rem, 2fr) minmax(10rem, 1.1fr) minmax(10rem, 1.1fr) minmax(14rem, 1.3fr) minmax(12rem, 0.95fr);
-    min-width: 920px;
-  }
-
-  .entry-grid-cell {
-    padding: 0.68rem 0.62rem;
-  }
-
-  th,
-  td {
-    padding: 0.68rem 0.62rem;
-    font-size: 0.93rem;
-  }
-
-  th {
-    font-size: 0.7rem;
-  }
-
-  .selection-head,
-  .selection-cell,
-  .entry-selection-cell {
-    width: 2.45rem;
-    min-width: 2.45rem;
-  }
-
-  .row-actions {
-    gap: 0.38rem;
-  }
-
-  .entry-row input,
-  .entry-row select,
-  .entry-row .custom-dropdown-trigger {
-    min-height: 2.5rem;
-  }
-
-  .entry-actions-cell {
-    min-width: 12rem;
-  }
-
-  .icon-button {
-    width: 2.22rem;
-    min-width: 2.22rem;
-    min-height: 2.22rem;
-  }
-
-  .icon-button svg {
-    width: 0.95rem;
-    height: 0.95rem;
-  }
-
-  .owner-inline-status {
-    font-size: 0.8rem;
-  }
-
-  .scroll-to-top-button {
-    right: 0.7rem;
-    bottom: 0.85rem;
-    width: 2.6rem;
-    min-width: 2.6rem;
-    min-height: 2.6rem;
-  }
-
-  .scroll-to-top-button svg {
-    width: 1rem;
-    height: 1rem;
-  }
 }
