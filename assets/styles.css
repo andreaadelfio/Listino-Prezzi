@@ -701,15 +701,14 @@ th {
   display: inline-block;
   width: 1.05rem;
   height: 1.05rem;
-  border: 1px dashed rgba(31, 42, 36, 0.18);
   border-radius: 0.35rem;
   background: var(--surface-strong);
   opacity: 1;
 }
 
 .row-selection-checkbox {
-  width: 1.05rem;
-  min-height: 1.05rem;
+  width: 1.25rem;
+  min-height: 1.25rem;
   margin: 0;
   padding: 0;
   accent-color: var(--accent);
