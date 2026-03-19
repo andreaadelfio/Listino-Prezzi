@@ -1,4 +1,4 @@
-const APP_VERSION = "20260319-24";
+const APP_VERSION = "20260319-26";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
@@ -203,7 +203,7 @@ function showFeedback(message, type = "success") {
       ${timerMarkup}
     </span>
   `;
-  elements.feedback.className = `feedback feedback-${type}`;
+  elements.feedback.className = `feedback feedback-inline feedback-${type}`;
 
   if (type === "success") {
     startFeedbackTimer();
@@ -216,7 +216,7 @@ function clearFeedback() {
   }
   stopFeedbackTimer();
   elements.feedback.textContent = "";
-  elements.feedback.className = "feedback hidden";
+  elements.feedback.className = "feedback feedback-inline hidden";
 }
 
 function escapeHtml(value) {

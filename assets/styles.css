@@ -575,13 +575,20 @@ select {
 }
 
 .feedback-inline {
-  margin-bottom: 0;
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 0.85rem);
+  left: 50%;
+  z-index: 1800;
+  width: min(32rem, calc(100vw - 1rem));
+  margin: 0;
   display: flex;
   align-items: center;
   min-height: 3rem;
   padding: 0.8rem 0.95rem;
-  align-self: center;
-  flex: 0 0 auto;
+  transform: translateX(-50%);
+  box-shadow: 0 14px 32px rgba(66, 46, 18, 0.14);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
 }
 
 .feedback-content {
@@ -589,6 +596,7 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 0.85rem;
+  width: 100%;
 }
 
 .feedback-message {
@@ -926,4 +934,199 @@ th {
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+}
+
+@media (max-width: 720px) {
+  .page-shell {
+    width: min(1360px, calc(100vw - 0.85rem));
+    padding: 0.65rem 0 0.7rem;
+  }
+
+  .panel {
+    padding: 0.8rem;
+    border-radius: 22px;
+  }
+
+  .panel-head,
+  .table-controls {
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .panel-title-main,
+  .panel-owner-inline,
+  .table-toolbar,
+  .table-search-actions,
+  .selection-box-head,
+  .selection-box-title,
+  .selection-box-actions,
+  .row-actions,
+  .entry-button-row {
+    gap: 0.45rem;
+  }
+
+  .panel-owner-inline .owner-field .custom-dropdown {
+    min-width: 8.5rem;
+  }
+
+  .field span,
+  .eyebrow,
+  th {
+    font-size: 0.7rem;
+  }
+
+  input,
+  select,
+  .custom-dropdown-trigger,
+  .table-search-field input {
+    min-height: 2.55rem;
+    padding: 0.62rem 0.78rem;
+    font-size: 0.95rem;
+  }
+
+  .custom-dropdown-trigger svg,
+  .sort-indicator {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .custom-dropdown-panel {
+    gap: 0.45rem;
+    padding: 0.55rem;
+  }
+
+  .custom-dropdown-panel input,
+  .custom-dropdown-option {
+    min-height: 2.35rem;
+  }
+
+  .primary-button,
+  .secondary-button {
+    min-height: 2.45rem;
+    padding: 0.58rem 0.82rem;
+    font-size: 0.95rem;
+  }
+
+  .compact-button,
+  .advanced-toggle-button,
+  .search-reset-button {
+    min-height: 2.35rem;
+    padding: 0.52rem 0.78rem;
+  }
+
+  .advanced-toggle-button {
+    min-height: 2.55rem;
+  }
+
+  .pill {
+    padding: 0.35rem 0.62rem;
+    font-size: 0.76rem;
+  }
+
+  .icon-button {
+    width: 2.2rem;
+    min-width: 2.2rem;
+    min-height: 2.2rem;
+  }
+
+  .icon-button svg {
+    width: 0.95rem;
+    height: 0.95rem;
+  }
+
+  .feedback-inline {
+    top: calc(env(safe-area-inset-top, 0px) + 0.55rem);
+    width: min(21rem, calc(100vw - 0.75rem));
+    min-height: 2.35rem;
+    padding: 0.5rem 0.68rem;
+  }
+
+  .feedback-content {
+    gap: 0.55rem;
+  }
+
+  .feedback-message {
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .feedback-timer {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .feedback-timer::after {
+    inset: 0.18rem;
+  }
+
+  .alphabet-index-wrap {
+    margin-bottom: 0.75rem;
+    padding: 0.35rem 0 0.45rem;
+  }
+
+  .alphabet-index {
+    gap: 0.28rem;
+  }
+
+  .alphabet-index-button {
+    width: 1.8rem;
+    min-width: 1.8rem;
+    min-height: 1.8rem;
+    font-size: 0.75rem;
+  }
+
+  .selection-box,
+  .selection-panel {
+    gap: 0.6rem;
+    padding: 0.8rem 0.85rem;
+  }
+
+  .selection-plain-list {
+    max-height: 4.4rem;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  th,
+  td {
+    padding: 0.72rem 0.68rem;
+    font-size: 0.92rem;
+  }
+
+  .selection-head,
+  .selection-cell,
+  .entry-selection-cell {
+    width: 2.55rem;
+    min-width: 2.55rem;
+  }
+
+  .entry-row td {
+    padding-top: 0.68rem;
+    padding-bottom: 0.68rem;
+  }
+
+  .entry-row input,
+  .entry-row select,
+  .entry-row .custom-dropdown-trigger {
+    min-height: 2.55rem;
+  }
+
+  .entry-actions-cell {
+    min-width: 8.25rem;
+  }
+
+  .scroll-to-top-button {
+    right: 0.7rem;
+    bottom: 0.75rem;
+    width: 2.55rem;
+    min-width: 2.55rem;
+    min-height: 2.55rem;
+  }
+
+  .scroll-to-top-button svg {
+    width: 1rem;
+    height: 1rem;
+  }
 }
