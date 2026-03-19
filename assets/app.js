@@ -1,15 +1,18 @@
-const APP_VERSION = "20260319-13";
+const APP_VERSION = "20260319-17";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
 const CHECKED_PRODUCTS_CACHE_KEY = "listino-checked-products-cache";
+const SORTABLE_COLUMN_KEYS = Object.freeze(["prodotto", "rivenditore", "categoria", "prezzo"]);
 const SESSION_URL_PARAM_KEYS = Object.freeze({
   owner: "o",
   search: "q",
   retailerFilter: "rf",
   categoryFilter: "cf",
   advancedFilters: "af",
-  selectedRows: "sel"
+  selectedRows: "sel",
+  sortKey: "sk",
+  sortDirection: "sd"
 });
 const ALPHABET_INDEX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 window.__listinoVersion = APP_VERSION;
@@ -33,7 +36,9 @@ const state = {
   categorySearchTerm: "",
   advancedFiltersOpen: false,
   urlSyncPaused: false,
-  selectAllWasIndeterminate: false
+  selectAllWasIndeterminate: false,
+  sortKey: "prodotto",
+  sortDirection: "asc"
 };
 
 let feedbackHideTimeoutId = null;
@@ -61,9 +66,12 @@ const elements = {
   advancedFilters: document.querySelector("#advanced-filters"),
   alphabetIndexWrap: document.querySelector(".alphabet-index-wrap"),
   alphabetIndex: document.querySelector("#alphabet-index"),
+  tableWrap: document.querySelector(".table-wrap"),
+  tableHead: document.querySelector("thead"),
   rivenditoreFilter: document.querySelector("#rivenditore-filter"),
   categoryFilter: document.querySelector("#category-filter"),
   searchInput: document.querySelector("#search-input"),
+  searchResetButton: document.querySelector("#search-reset-button"),
   rivenditoreHiddenInput: document.querySelector("#rivenditore-hidden-input"),
   rivenditoreDropdown: document.querySelector("#rivenditore-dropdown"),
   rivenditoreDropdownButton: document.querySelector("#rivenditore-dropdown-button"),
@@ -87,7 +95,9 @@ const elements = {
   selectedRowsCount: document.querySelector("#selected-rows-count"),
   selectedRowsList: document.querySelector("#selected-rows-list"),
   selectedRowsCopyButton: document.querySelector("#selected-rows-copy-button"),
-  selectAllCheckbox: document.querySelector("#select-all-checkbox")
+  selectAllCheckbox: document.querySelector("#select-all-checkbox"),
+  sortButtons: [...document.querySelectorAll(".sort-button")],
+  sortHeaders: [...document.querySelectorAll("th[data-sort-column]")]
 };
 
 if (elements.rowsBody) {
@@ -130,7 +140,8 @@ function updateScrollToTopButtonVisibility() {
     return;
   }
 
-  const shouldShow = window.scrollY > 280;
+  const scrollTop = elements.tableWrap?.scrollTop ?? window.scrollY;
+  const shouldShow = scrollTop > 280;
   elements.scrollToTopButton.classList.toggle("hidden", !shouldShow);
 }
 
@@ -268,6 +279,15 @@ function normalizeOwnerKey(value) {
   return normalizeOwnerValue(value).toLowerCase();
 }
 
+function normalizeSortKey(value) {
+  const normalizedValue = String(value || "").trim().toLowerCase();
+  return SORTABLE_COLUMN_KEYS.includes(normalizedValue) ? normalizedValue : "prodotto";
+}
+
+function normalizeSortDirection(value) {
+  return String(value || "").trim().toLowerCase() === "desc" ? "desc" : "asc";
+}
+
 function getProductAlphabetLetter(value) {
   const normalized = normalizeAlphabetSource(value);
   const firstCharacter = normalized.charAt(0).toUpperCase();
@@ -400,7 +420,9 @@ function readSessionStateFromUrl() {
     retailerFilterId: String(params.get(SESSION_URL_PARAM_KEYS.retailerFilter) || "").trim(),
     category: String(params.get(SESSION_URL_PARAM_KEYS.categoryFilter) || "").trim(),
     advancedFiltersOpen: params.get(SESSION_URL_PARAM_KEYS.advancedFilters) === "1",
-    selectedRowIds: decodeSelectedRowsFromUrl(params.get(SESSION_URL_PARAM_KEYS.selectedRows))
+    selectedRowIds: decodeSelectedRowsFromUrl(params.get(SESSION_URL_PARAM_KEYS.selectedRows)),
+    sortKey: normalizeSortKey(params.get(SESSION_URL_PARAM_KEYS.sortKey)),
+    sortDirection: normalizeSortDirection(params.get(SESSION_URL_PARAM_KEYS.sortDirection))
   };
 }
 
@@ -411,7 +433,9 @@ function buildSessionStateForUrl() {
     retailerFilterId: String(elements.rivenditoreFilter?.value || "").trim(),
     category: String(elements.categoryFilter?.value || "").trim(),
     advancedFiltersOpen: Boolean(state.advancedFiltersOpen),
-    selectedRows: encodeSelectedRowsForUrl()
+    selectedRows: encodeSelectedRowsForUrl(),
+    sortKey: normalizeSortKey(state.sortKey),
+    sortDirection: normalizeSortDirection(state.sortDirection)
   };
 }
 
@@ -444,6 +468,10 @@ function syncUrlState() {
   if (sessionState.selectedRows) {
     url.searchParams.set(SESSION_URL_PARAM_KEYS.selectedRows, sessionState.selectedRows);
   }
+  if (sessionState.sortKey !== "prodotto" || sessionState.sortDirection !== "asc") {
+    url.searchParams.set(SESSION_URL_PARAM_KEYS.sortKey, sessionState.sortKey);
+    url.searchParams.set(SESSION_URL_PARAM_KEYS.sortDirection, sessionState.sortDirection);
+  }
 
   const nextUrl = `${url.pathname}${url.search}${url.hash}`;
   const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -464,6 +492,8 @@ function applySessionStateFromUrl(sessionState) {
   setSelectValue(elements.categoryFilter, sessionState.category || "");
 
   state.advancedFiltersOpen = Boolean(sessionState.advancedFiltersOpen);
+  state.sortKey = normalizeSortKey(sessionState.sortKey);
+  state.sortDirection = normalizeSortDirection(sessionState.sortDirection);
   renderAdvancedFilters();
 
   const rowsById = new Map(state.rows.map((row) => [String(row.id), row]));
@@ -538,6 +568,81 @@ function findRowById(rowId) {
 function findRivenditoreByName(name) {
   const normalizedName = normalizeRivenditoreName(name);
   return state.rivenditores.find((rivenditore) => normalizeRivenditoreName(rivenditore.name) === normalizedName) || null;
+}
+
+function compareTextValues(valueA, valueB) {
+  return String(valueA || "").localeCompare(String(valueB || ""), "it", { sensitivity: "base" });
+}
+
+function compareProductGroups(groupA, groupB) {
+  let comparison = 0;
+
+  switch (state.sortKey) {
+    case "rivenditore":
+      comparison = compareTextValues(groupA.selectedRow?.rivenditore_name, groupB.selectedRow?.rivenditore_name);
+      break;
+    case "categoria":
+      comparison = compareTextValues(groupA.selectedRow?.categoria, groupB.selectedRow?.categoria);
+      break;
+    case "prezzo": {
+      const priceA = getSortablePriceValue(groupA.selectedRow);
+      const priceB = getSortablePriceValue(groupB.selectedRow);
+      const hasPriceA = Number.isFinite(priceA);
+      const hasPriceB = Number.isFinite(priceB);
+
+      if (hasPriceA !== hasPriceB) {
+        comparison = hasPriceA ? -1 : 1;
+      } else if (hasPriceA && priceA !== priceB) {
+        comparison = priceA - priceB;
+      } else {
+        comparison = compareTextValues(groupA.selectedRow?.prezzo, groupB.selectedRow?.prezzo);
+      }
+      break;
+    }
+    case "prodotto":
+    default:
+      comparison = compareTextValues(groupA.product, groupB.product);
+      break;
+  }
+
+  if (comparison === 0) {
+    comparison = compareTextValues(groupA.product, groupB.product);
+  }
+
+  return state.sortDirection === "desc" ? comparison * -1 : comparison;
+}
+
+function sortProductGroups(productGroups) {
+  return [...productGroups].sort(compareProductGroups);
+}
+
+function renderSortButtons() {
+  if (!elements.sortButtons.length) {
+    return;
+  }
+
+  elements.sortButtons.forEach((button) => {
+    const sortKey = normalizeSortKey(button.dataset.sortKey);
+    const isActive = state.sortKey === sortKey;
+    const indicator = button.querySelector(".sort-indicator");
+    const header = elements.sortHeaders.find((element) => element.dataset.sortColumn === sortKey);
+
+    button.classList.toggle("sort-button-active", isActive);
+    button.dataset.sortDirection = isActive ? state.sortDirection : "none";
+    button.setAttribute("aria-pressed", String(isActive));
+
+    if (indicator) {
+      indicator.textContent = isActive
+        ? (state.sortDirection === "asc" ? "↑" : "↓")
+        : "↕";
+    }
+
+    if (header) {
+      header.setAttribute("aria-sort", isActive
+        ? (state.sortDirection === "asc" ? "ascending" : "descending")
+        : "none");
+    }
+  });
 }
 
 async function findRivenditoreByOwnerAndName(owner, name) {
@@ -705,12 +810,13 @@ function renderAlphabetIndex() {
 function updateStickyAlphabetMetrics() {
   const stickyTop = window.innerWidth <= 560 ? 4 : 6;
   const wrapHeight = elements.alphabetIndexWrap?.offsetHeight || 0;
+  const tableHeadHeight = elements.tableHead?.getBoundingClientRect().height || 0;
 
   document.documentElement.style.setProperty("--alphabet-sticky-top", `${stickyTop}px`);
   document.documentElement.style.setProperty("--alphabet-sticky-height", `${wrapHeight}px`);
   document.documentElement.style.setProperty("--entry-row-sticky-top", `0px`);
   document.documentElement.style.setProperty("--table-head-sticky-top", `0px`);
-  document.documentElement.style.setProperty("--alphabet-scroll-offset", `${stickyTop + wrapHeight + 12}px`);
+  document.documentElement.style.setProperty("--alphabet-scroll-offset", `${tableHeadHeight + 8}px`);
 }
 
 function highlightAlphabetTarget(row) {
@@ -748,18 +854,35 @@ function scrollToAlphabetLetter(letter) {
   }
 
   highlightAlphabetTarget(targetRow);
-  const offset = Number.parseFloat(
+  const scrollContainer = elements.tableWrap;
+  if (!scrollContainer) {
+    return;
+  }
+
+  const headerOffset = Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue("--alphabet-scroll-offset")
   ) || 0;
-  const targetTop = targetRow.getBoundingClientRect().top + window.scrollY - offset;
-  window.scrollTo({
+  const containerRect = scrollContainer.getBoundingClientRect();
+  const targetRect = targetRow.getBoundingClientRect();
+  const targetTop = targetRect.top - containerRect.top + scrollContainer.scrollTop - headerOffset;
+
+  scrollContainer.scrollTo({
     top: Math.max(targetTop, 0),
     behavior: "smooth"
   });
 }
 
 function handleScrollToTop() {
-  window.scrollTo({
+  const scrollContainer = elements.tableWrap;
+  if (!scrollContainer) {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth"
+    });
+    return;
+  }
+
+  scrollContainer.scrollTo({
     top: 0,
     behavior: "smooth"
   });
@@ -1224,7 +1347,7 @@ function applyFilters(options = {}) {
   const category = elements.categoryFilter.value;
 
   const groupedProducts = buildProductGroups();
-  state.filteredProducts = groupedProducts.filter((group) => {
+  const filteredGroups = groupedProducts.filter((group) => {
     const haystack = group.rows
       .flatMap((row) => [
         row.prodotto,
@@ -1242,6 +1365,7 @@ function applyFilters(options = {}) {
     if (category && !group.rows.some((row) => row.categoria === category)) return false;
     return true;
   });
+  state.filteredProducts = sortProductGroups(filteredGroups);
 
   renderRows();
   if (syncUrl) {
@@ -1250,6 +1374,8 @@ function applyFilters(options = {}) {
 }
 
 function renderRows() {
+  renderSortButtons();
+
   if (!state.filteredProducts.length) {
     elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Nessuna riga trovata.</td></tr>`;
     elements.tableCounter.textContent = "0 prodotti";
@@ -1260,6 +1386,7 @@ function renderRows() {
   }
 
   let previousLetter = "";
+  const showAlphabetDividers = state.sortKey === "prodotto";
   const rowsMarkup = state.filteredProducts.map((group) => {
     const row = group.selectedRow;
     const isChecked = Boolean(state.checkedProducts[group.product]);
@@ -1270,7 +1397,7 @@ function renderRows() {
       </option>
     `).join("");
 
-    const dividerMarkup = alphaLetter !== previousLetter
+    const dividerMarkup = showAlphabetDividers && alphaLetter !== previousLetter
       ? `
         <tr class="alphabet-divider-row" data-alpha-letter="${alphaLetter}">
           <td colspan="${TABLE_COLUMN_COUNT}">${escapeHtml(alphaLetter === "#" ? "Altro" : alphaLetter)}</td>
@@ -2016,6 +2143,34 @@ async function handleRowActionClick(event) {
   }
 }
 
+function handleSortButtonClick(event) {
+  const button = event.currentTarget;
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const nextSortKey = normalizeSortKey(button.dataset.sortKey);
+  if (state.sortKey === nextSortKey) {
+    state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
+  } else {
+    state.sortKey = nextSortKey;
+    state.sortDirection = "asc";
+  }
+
+  applyFilters();
+}
+
+function handleSearchReset() {
+  if (elements.searchInput) {
+    elements.searchInput.value = "";
+  }
+
+  setSelectValue(elements.rivenditoreFilter, "");
+  setSelectValue(elements.categoryFilter, "");
+  applyFilters();
+  elements.searchInput?.focus();
+}
+
 function bindEvents() {
   elements.scrollToTopButton?.addEventListener("click", handleScrollToTop);
   elements.selectAllCheckbox?.addEventListener("pointerdown", rememberSelectAllToggleIntent);
@@ -2043,10 +2198,13 @@ function bindEvents() {
   document.addEventListener("keydown", handleDocumentKeydown);
   window.addEventListener("resize", updateStickyAlphabetMetrics);
   window.addEventListener("scroll", updateScrollToTopButtonVisibility, { passive: true });
+  elements.tableWrap?.addEventListener("scroll", updateScrollToTopButtonVisibility, { passive: true });
 
   elements.searchInput.addEventListener("input", applyFilters);
+  elements.searchResetButton?.addEventListener("click", handleSearchReset);
   elements.rivenditoreFilter.addEventListener("change", applyFilters);
   elements.categoryFilter.addEventListener("change", applyFilters);
+  elements.sortButtons.forEach((button) => button.addEventListener("click", handleSortButtonClick));
 }
 
 async function bootstrap() {

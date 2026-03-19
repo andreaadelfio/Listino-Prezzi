@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Listino Prezzi Raw</title>
+    <title>Listino Prezzi</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./assets/styles.css?v=20260319-13">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260319-18">
   </head>
   <body>
     <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
@@ -28,38 +28,7 @@
     </button>
 
     <div class="page-shell">
-      <header class="hero">
-        <div class="hero-copy">
-          <h1>Listino Prezzi</h1>
-        </div>
-        <div class="hero-meta">
-          <div class="owner-inline">
-            <div class="field owner-field">
-              <span>Owner</span>
-              <div id="owner-dropdown" class="custom-dropdown">
-                <button
-                  id="owner-dropdown-button"
-                  class="custom-dropdown-trigger"
-                  type="button"
-                  aria-haspopup="listbox"
-                  aria-expanded="false"
-                >
-                  <span id="owner-dropdown-label">Seleziona o crea owner</span>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M7 10l5 5 5-5z"/>
-                  </svg>
-                </button>
-                <div id="owner-dropdown-panel" class="custom-dropdown-panel hidden">
-                  <input id="owner-dropdown-search" type="search" placeholder="Cerca o crea owner">
-                  <div id="owner-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Owner disponibili"></div>
-                </div>
-              </div>
-            </div>
-            <p id="owner-status" class="field-help owner-inline-status">Caricamento owner dal database...</p>
-          </div>
-        </div>
-      </header>
-
+      
       <main class="main-grid">
         <section id="selected-rows-box" class="selection-box selection-panel panel-wide hidden" aria-live="polite">
           <div class="selection-box-head">
@@ -73,12 +42,39 @@
           </div>
           <pre id="selected-rows-list" class="selection-plain-list"></pre>
         </section>
-
+        
         <section id="listino-panel" class="panel panel-wide">
           <div class="panel-head">
             <div class="panel-title-row">
-              <div>
-                <p class="eyebrow">Listino Prezzi</p>
+              <div class="panel-title-block">
+                <div class="panel-owner-inline">
+                  <p class="eyebrow">Listino Prezzi di</p>
+                  <div class="hero-meta">
+                    <div class="owner-inline">
+                      <div class="field owner-field">
+                        <div id="owner-dropdown" class="custom-dropdown">
+                          <button
+                            id="owner-dropdown-button"
+                            class="custom-dropdown-trigger"
+                            type="button"
+                            aria-haspopup="listbox"
+                            aria-expanded="false"
+                          >
+                            <span id="owner-dropdown-label">Seleziona o crea owner</span>
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M7 10l5 5 5-5z"/>
+                            </svg>
+                          </button>
+                          <div id="owner-dropdown-panel" class="custom-dropdown-panel hidden">
+                            <input id="owner-dropdown-search" type="search" placeholder="Cerca o crea owner">
+                            <div id="owner-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Owner disponibili"></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p id="owner-status" class="field-help owner-inline-status">Caricamento owner dal database...</p>
               </div>
               <div id="feedback" class="feedback feedback-inline hidden"></div>
             </div>
@@ -98,14 +94,23 @@
                 <span>Ricerca</span>
                 <div class="table-search-inline">
                   <input id="search-input" type="search" placeholder="Cerca in tutto: prodotto, rivenditore, categoria, prezzo">
-                  <button
-                    id="advanced-toggle-button"
-                    class="secondary-button advanced-toggle-button"
-                    type="button"
-                    aria-expanded="false"
-                  >
-                    Advanced
-                  </button>
+                  <div class="table-search-actions">
+                    <button
+                      id="advanced-toggle-button"
+                      class="secondary-button advanced-toggle-button"
+                      type="button"
+                      aria-expanded="false"
+                    >
+                      Advanced
+                    </button>
+                    <button
+                      id="search-reset-button"
+                      class="secondary-button search-reset-button"
+                      type="button"
+                    >
+                      Reset
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -145,10 +150,30 @@
                       aria-label="Seleziona o deseleziona tutti i prodotti visibili"
                     >
                   </th>
-                  <th>Prodotto</th>
-                  <th>Rivenditore</th>
-                  <th>Categoria</th>
-                  <th>Prezzo</th>
+                  <th class="sort-head" data-sort-column="prodotto" aria-sort="ascending">
+                    <button type="button" class="sort-button sort-button-active" data-sort-key="prodotto" aria-pressed="true">
+                      <span>Prodotto</span>
+                      <span class="sort-indicator" aria-hidden="true">↑</span>
+                    </button>
+                  </th>
+                  <th class="sort-head" data-sort-column="rivenditore" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="rivenditore" aria-pressed="false">
+                      <span>Rivenditore</span>
+                      <span class="sort-indicator" aria-hidden="true">↕</span>
+                    </button>
+                  </th>
+                  <th class="sort-head" data-sort-column="categoria" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="categoria" aria-pressed="false">
+                      <span>Categoria</span>
+                      <span class="sort-indicator" aria-hidden="true">↕</span>
+                    </button>
+                  </th>
+                  <th class="sort-head" data-sort-column="prezzo" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="prezzo" aria-pressed="false">
+                      <span>Prezzo</span>
+                      <span class="sort-indicator" aria-hidden="true">↕</span>
+                    </button>
+                  </th>
                   <th>Azioni</th>
                 </tr>
               </thead>
@@ -231,7 +256,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./assets/config.js?v=20260319-13"></script>
-    <script src="./assets/app.js?v=20260319-13"></script>
+    <script src="./assets/config.js?v=20260319-18"></script>
+    <script src="./assets/app.js?v=20260319-18"></script>
   </body>
 </html>
