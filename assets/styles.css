@@ -205,11 +205,9 @@ select {
 
 .custom-dropdown-trigger {
   width: 100%;
-  /* min-height: 3rem; */
   display: flex;
   align-items: center;
   justify-content: space-between;
-  /* gap: 0.8rem; */
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: rgba(255, 250, 244, 0.95);
@@ -292,7 +290,6 @@ select {
 input,
 select {
   width: 100%;
-  /* min-height: 3rem; */
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: rgba(255, 250, 244, 0.95);
@@ -377,8 +374,6 @@ select {
 }
 
 .table-search-field input {
-  /* min-height: 3rem; */
-  /* width: 100%; */
   max-width: 100%;
 }
 
@@ -622,7 +617,6 @@ select {
 
 table {
   width: max-content;
-  /* min-width: 100%; */
   border-collapse: collapse;
 }
 
@@ -734,15 +728,7 @@ th {
   z-index: 4;
   background: var(--surface-strong);
   vertical-align: middle;
-  /* padding-top: 0.8rem;
-  padding-bottom: 0.8rem; */
   box-shadow: inset 0 -1px 0 rgba(31, 42, 36, 0.08);
-}
-
-.entry-row input,
-.entry-row select,
-.entry-row .custom-dropdown-trigger {
-  /* min-height: 2.85rem; */
 }
 
 .entry-actions-cell {
