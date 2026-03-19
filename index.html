@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Listino Prezzi</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./assets/styles.css?v=20260319-26">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260319-29">
   </head>
   <body>
     <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
@@ -30,33 +30,29 @@
     <div class="page-shell">
       
       <main class="main-grid">
-        <section id="listino-panel" class="panel panel-wide">
+        <section id="listino-panel" class="panel">
           <div class="panel-head">
             <div class="panel-title-row">
               <div class="panel-title-main">
                 <div class="panel-owner-inline">
                   <p class="eyebrow">Listino Prezzi di</p>
-                  <div class="hero-meta">
-                    <div class="owner-inline">
-                      <div class="field owner-field">
-                        <div id="owner-dropdown" class="custom-dropdown">
-                          <button
-                            id="owner-dropdown-button"
-                            class="custom-dropdown-trigger"
-                            type="button"
-                            aria-haspopup="listbox"
-                            aria-expanded="false"
-                          >
-                            <span id="owner-dropdown-label">Seleziona o crea owner</span>
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                              <path d="M7 10l5 5 5-5z"/>
-                            </svg>
-                          </button>
-                          <div id="owner-dropdown-panel" class="custom-dropdown-panel hidden">
-                            <input id="owner-dropdown-search" type="search" placeholder="Cerca o crea owner">
-                            <div id="owner-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Owner disponibili"></div>
-                          </div>
-                        </div>
+                  <div class="field owner-field">
+                    <div id="owner-dropdown" class="custom-dropdown">
+                      <button
+                        id="owner-dropdown-button"
+                        class="custom-dropdown-trigger"
+                        type="button"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                      >
+                        <span id="owner-dropdown-label">Seleziona o crea owner</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M7 10l5 5 5-5z"/>
+                        </svg>
+                      </button>
+                      <div id="owner-dropdown-panel" class="custom-dropdown-panel hidden">
+                        <input id="owner-dropdown-search" type="search" placeholder="Cerca o crea owner">
+                        <div id="owner-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Owner disponibili"></div>
                       </div>
                     </div>
                   </div>
@@ -219,7 +215,7 @@
                 </div>
                   </td>
                   <td data-label="Prezzo">
-                <input form="price-form" name="prezzo" type="text" placeholder="Es. 1EUR/l o 7.35EUR/kg" required>
+                <input form="price-form" name="prezzo" type="text" placeholder="Es. 1€/l o 7.€/kg" required>
                   </td>
                   <td class="entry-actions-cell" data-label="Azioni">
                 <div class="entry-actions">
@@ -256,7 +252,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./assets/config.js?v=20260319-26"></script>
-    <script src="./assets/app.js?v=20260319-26"></script>
+    <script src="./assets/config.js?v=20260319-29"></script>
+    <script src="./assets/app.js?v=20260319-29"></script>
   </body>
 </html>

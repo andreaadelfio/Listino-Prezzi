@@ -1,4 +1,4 @@
-const APP_VERSION = "20260319-26";
+const APP_VERSION = "20260319-28";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
@@ -15,7 +15,6 @@ const SESSION_URL_PARAM_KEYS = Object.freeze({
   sortDirection: "sd"
 });
 const ALPHABET_INDEX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-window.__listinoVersion = APP_VERSION;
 
 const state = {
   ownerOptions: [],
@@ -61,7 +60,6 @@ const elements = {
   priceForm: document.querySelector("#price-form"),
   priceSubmitButton: document.querySelector("#price-submit-button"),
   priceCancelButton: document.querySelector("#price-cancel-button"),
-  priceFormNote: document.querySelector("#price-form-note"),
   advancedToggleButton: document.querySelector("#advanced-toggle-button"),
   advancedFilters: document.querySelector("#advanced-filters"),
   alphabetIndexWrap: document.querySelector(".alphabet-index-wrap"),
@@ -89,7 +87,6 @@ const elements = {
   entryRow: document.querySelector("#entry-row"),
   rowsBody: document.querySelector("#rows-body"),
   tableCounter: document.querySelector("#table-counter"),
-  listinoPanel: document.querySelector("#listino-panel"),
   feedback: document.querySelector("#feedback"),
   selectedRowsBox: document.querySelector("#selected-rows-box"),
   selectedRowsCount: document.querySelector("#selected-rows-count"),
@@ -677,12 +674,6 @@ function syncCheckedProducts() {
   persistCheckedProductsForOwner();
 }
 
-function setFormNote(message) {
-  if (elements.priceFormNote) {
-    elements.priceFormNote.textContent = message;
-  }
-}
-
 function setOwnerStatus(message, type = "neutral") {
   if (!elements.ownerStatus) {
     return;
@@ -809,14 +800,11 @@ function renderAlphabetIndex() {
 
 function updateStickyAlphabetMetrics() {
   const stickyTop = 6;
-  const wrapHeight = elements.alphabetIndexWrap?.offsetHeight || 0;
   const tableHeadHeight = elements.tableHead?.getBoundingClientRect().height || 0;
   const entryRowHeight = elements.entryRow?.getBoundingClientRect().height || 0;
 
   document.documentElement.style.setProperty("--alphabet-sticky-top", `${stickyTop}px`);
-  document.documentElement.style.setProperty("--alphabet-sticky-height", `${wrapHeight}px`);
   document.documentElement.style.setProperty("--entry-row-sticky-top", `${tableHeadHeight}px`);
-  document.documentElement.style.setProperty("--table-head-sticky-top", `0px`);
   document.documentElement.style.setProperty("--alphabet-scroll-offset", `${tableHeadHeight + entryRowHeight + 8}px`);
 }
 
@@ -959,7 +947,6 @@ function setPriceFormMode(mode, row = null) {
     state.editingRowId = row.id;
     elements.priceSubmitButton.textContent = "Aggiorna";
     elements.priceCancelButton.classList.remove("hidden");
-    setFormNote(`Stai modificando ${row.prodotto} presso ${row.rivenditore_name}.`);
     elements.entryRow?.classList.add("entry-row-editing");
 
     elements.priceForm.elements.prodotto.value = row.prodotto || "";
@@ -977,7 +964,6 @@ function setPriceFormMode(mode, row = null) {
   elements.priceForm.reset();
   elements.priceSubmitButton.textContent = "Salva";
   elements.priceCancelButton.classList.add("hidden");
-  setFormNote("La combinazione prodotto-rivenditore viene gestita automaticamente.");
   state.rivenditoreSearchTerm = "";
   state.categorySearchTerm = "";
   elements.entryRow?.classList.remove("entry-row-editing");
@@ -1701,42 +1687,6 @@ async function applyOwnerSelection(owner, options = {}) {
   });
 }
 
-async function testRivenditoresQuery() {
-  if (!supabaseClient) {
-    throw new Error("Client Supabase non inizializzato.");
-  }
-
-  let query = supabaseClient
-    .from("retailers")
-    .select("id, name, owner")
-    .order("name", { ascending: true })
-    .limit(5);
-
-  if (state.currentOwner) {
-    query = query.eq("owner", state.currentOwner);
-  }
-
-  return query;
-}
-
-async function testRowsQuery() {
-  if (!supabaseClient) {
-    throw new Error("Client Supabase non inizializzato.");
-  }
-
-  let query = supabaseClient
-    .from("listino_prezzi_raw")
-    .select("id, prodotto, retailer_id, categoria, prezzo, created_at, owner")
-    .order("created_at", { ascending: false })
-    .limit(5);
-
-  if (state.currentOwner) {
-    query = query.eq("owner", state.currentOwner);
-  }
-
-  return query;
-}
-
 async function handlePriceSubmit(event) {
   event.preventDefault();
   clearFeedback();
@@ -2199,14 +2149,6 @@ async function bootstrap() {
   try {
     const sharedSession = readSessionStateFromUrl();
     supabaseClient = createSupabaseClient();
-    window.listinoDebug = {
-      getCurrentOwner: () => state.currentOwner,
-      loadOwnerOptions,
-      testRivenditoresQuery,
-      testRowsQuery,
-      refreshData,
-      getShareUrl: () => window.location.href
-    };
     bindEvents();
     renderAdvancedFilters();
     updateScrollToTopButtonVisibility();
