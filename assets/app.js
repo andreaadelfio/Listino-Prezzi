@@ -2136,7 +2136,6 @@ function handleSearchReset() {
   setSelectValue(elements.rivenditoreFilter, "");
   setSelectValue(elements.categoryFilter, "");
   applyFilters();
-  elements.searchInput?.focus();
 }
 
 function bindEvents() {
