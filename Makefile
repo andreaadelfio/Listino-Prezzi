@@ -1,4 +1,4 @@
-PORT ?= 8002
+PORT ?= 8003
 HOST ?= 127.0.0.1
 SITE_DIR ?= .
 

@@ -1,4 +1,4 @@
-const APP_VERSION = "20260316-45";
+const APP_VERSION = "20260319-13";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
@@ -32,7 +32,8 @@ const state = {
   categoryDropdownOpen: false,
   categorySearchTerm: "",
   advancedFiltersOpen: false,
-  urlSyncPaused: false
+  urlSyncPaused: false,
+  selectAllWasIndeterminate: false
 };
 
 let feedbackHideTimeoutId = null;
@@ -43,6 +44,7 @@ let loadingRequestCount = 0;
 const elements = {
   loadingOverlay: document.querySelector("#loading-overlay"),
   loadingOverlayLabel: document.querySelector("#loading-overlay-label"),
+  scrollToTopButton: document.querySelector("#scroll-to-top-button"),
   ownerDropdown: document.querySelector("#owner-dropdown"),
   ownerDropdownButton: document.querySelector("#owner-dropdown-button"),
   ownerDropdownLabel: document.querySelector("#owner-dropdown-label"),
@@ -57,6 +59,7 @@ const elements = {
   priceFormNote: document.querySelector("#price-form-note"),
   advancedToggleButton: document.querySelector("#advanced-toggle-button"),
   advancedFilters: document.querySelector("#advanced-filters"),
+  alphabetIndexWrap: document.querySelector(".alphabet-index-wrap"),
   alphabetIndex: document.querySelector("#alphabet-index"),
   rivenditoreFilter: document.querySelector("#rivenditore-filter"),
   categoryFilter: document.querySelector("#category-filter"),
@@ -83,7 +86,8 @@ const elements = {
   selectedRowsBox: document.querySelector("#selected-rows-box"),
   selectedRowsCount: document.querySelector("#selected-rows-count"),
   selectedRowsList: document.querySelector("#selected-rows-list"),
-  selectedRowsCopyButton: document.querySelector("#selected-rows-copy-button")
+  selectedRowsCopyButton: document.querySelector("#selected-rows-copy-button"),
+  selectAllCheckbox: document.querySelector("#select-all-checkbox")
 };
 
 if (elements.rowsBody) {
@@ -119,6 +123,15 @@ function showFatal(message) {
     elements.tableCounter.textContent = "errore";
   }
   showFeedback(message, "error");
+}
+
+function updateScrollToTopButtonVisibility() {
+  if (!elements.scrollToTopButton) {
+    return;
+  }
+
+  const shouldShow = window.scrollY > 280;
+  elements.scrollToTopButton.classList.toggle("hidden", !shouldShow);
 }
 
 function showTableMessage(message) {
@@ -217,6 +230,27 @@ function parsePriceText(priceText) {
     value: Number(match[1].replace(",", ".")),
     unit: match[2] || null
   };
+}
+
+function getSortablePriceValue(row) {
+  if (!row) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const parsedPrice = parsePriceText(row.prezzo);
+  return Number.isFinite(parsedPrice.value) ? parsedPrice.value : Number.POSITIVE_INFINITY;
+}
+
+function compareRowsByBestPrice(rowA, rowB) {
+  const priceA = getSortablePriceValue(rowA);
+  const priceB = getSortablePriceValue(rowB);
+  if (priceA !== priceB) {
+    return priceA - priceB;
+  }
+
+  const nameA = String(rowA?.rivenditore_name || "");
+  const nameB = String(rowB?.rivenditore_name || "");
+  return nameA.localeCompare(nameB, "it");
 }
 
 function normalizeOwnerValue(value) {
@@ -664,6 +698,19 @@ function renderAlphabetIndex() {
       </button>
     `;
   }).join("");
+
+  updateStickyAlphabetMetrics();
+}
+
+function updateStickyAlphabetMetrics() {
+  const stickyTop = window.innerWidth <= 560 ? 4 : 6;
+  const wrapHeight = elements.alphabetIndexWrap?.offsetHeight || 0;
+
+  document.documentElement.style.setProperty("--alphabet-sticky-top", `${stickyTop}px`);
+  document.documentElement.style.setProperty("--alphabet-sticky-height", `${wrapHeight}px`);
+  document.documentElement.style.setProperty("--entry-row-sticky-top", `0px`);
+  document.documentElement.style.setProperty("--table-head-sticky-top", `0px`);
+  document.documentElement.style.setProperty("--alphabet-scroll-offset", `${stickyTop + wrapHeight + 12}px`);
 }
 
 function highlightAlphabetTarget(row) {
@@ -701,7 +748,62 @@ function scrollToAlphabetLetter(letter) {
   }
 
   highlightAlphabetTarget(targetRow);
-  targetRow.scrollIntoView({ behavior: "smooth", block: "start" });
+  const offset = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--alphabet-scroll-offset")
+  ) || 0;
+  const targetTop = targetRow.getBoundingClientRect().top + window.scrollY - offset;
+  window.scrollTo({
+    top: Math.max(targetTop, 0),
+    behavior: "smooth"
+  });
+}
+
+function handleScrollToTop() {
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
+function rememberSelectAllToggleIntent(event) {
+  if (event instanceof KeyboardEvent && ![" ", "Enter", "Spacebar"].includes(event.key)) {
+    return;
+  }
+  state.selectAllWasIndeterminate = Boolean(elements.selectAllCheckbox?.indeterminate);
+}
+
+function handleSelectAllChange(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) {
+    return;
+  }
+
+  const visibleProducts = state.filteredProducts.map((group) => group.product).filter(Boolean);
+  if (!visibleProducts.length) {
+    state.selectAllWasIndeterminate = false;
+    updateSelectAllCheckboxState();
+    return;
+  }
+
+  if (state.selectAllWasIndeterminate) {
+    visibleProducts.forEach((product) => {
+      delete state.checkedProducts[product];
+    });
+    target.checked = false;
+  } else if (target.checked) {
+    visibleProducts.forEach((product) => {
+      state.checkedProducts[product] = true;
+    });
+  } else {
+    visibleProducts.forEach((product) => {
+      delete state.checkedProducts[product];
+    });
+  }
+
+  state.selectAllWasIndeterminate = false;
+  persistCheckedProductsForOwner();
+  renderRows();
+  syncUrlState();
 }
 
 function clearCurrentOwner() {
@@ -719,6 +821,7 @@ function clearCurrentOwner() {
   renderOwnerSelect();
   renderAlphabetIndex();
   renderSelectedRowsBox();
+  updateSelectAllCheckboxState();
   showTableMessage("Seleziona un owner per caricare il listino.");
   if (elements.tableCounter) {
     elements.tableCounter.textContent = "owner richiesto";
@@ -980,11 +1083,7 @@ function buildProductGroups() {
         }
       });
 
-      const rows = [...uniqueRivenditoreRows.values()].sort((a, b) => {
-        const rivenditoreA = a.rivenditore_name || "";
-        const rivenditoreB = b.rivenditore_name || "";
-        return rivenditoreA.localeCompare(rivenditoreB, "it");
-      });
+      const rows = [...uniqueRivenditoreRows.values()].sort(compareRowsByBestPrice);
 
       const savedRivenditoreId = state.selectedRivenditoreByProduct[group.product];
       const selectedRow = rows.find((row) => String(row.retailer_id) === String(savedRivenditoreId))
@@ -1099,6 +1198,25 @@ async function handleSelectedRowsCopy() {
   }
 }
 
+function updateSelectAllCheckboxState() {
+  if (!elements.selectAllCheckbox) {
+    return;
+  }
+
+  const visibleProducts = state.filteredProducts.map((group) => group.product).filter(Boolean);
+  if (!visibleProducts.length) {
+    elements.selectAllCheckbox.checked = false;
+    elements.selectAllCheckbox.indeterminate = false;
+    elements.selectAllCheckbox.disabled = true;
+    return;
+  }
+
+  const checkedCount = visibleProducts.filter((product) => Boolean(state.checkedProducts[product])).length;
+  elements.selectAllCheckbox.disabled = false;
+  elements.selectAllCheckbox.checked = checkedCount === visibleProducts.length;
+  elements.selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < visibleProducts.length;
+}
+
 function applyFilters(options = {}) {
   const { syncUrl = true } = options;
   const search = elements.searchInput.value.trim().toLowerCase();
@@ -1137,6 +1255,7 @@ function renderRows() {
     elements.tableCounter.textContent = "0 prodotti";
     renderAlphabetIndex();
     renderSelectedRowsBox();
+    updateSelectAllCheckboxState();
     return;
   }
 
@@ -1218,6 +1337,7 @@ function renderRows() {
   elements.tableCounter.textContent = `${state.filteredProducts.length} prodotti`;
   renderAlphabetIndex();
   renderSelectedRowsBox();
+  updateSelectAllCheckboxState();
 }
 
 async function loadOwnerOptions() {
@@ -1800,6 +1920,7 @@ function handleRowRivenditoreChange(event) {
     }
 
     persistCheckedProductsForOwner();
+    updateSelectAllCheckboxState();
     renderSelectedRowsBox();
     syncUrlState();
     return;
@@ -1896,6 +2017,10 @@ async function handleRowActionClick(event) {
 }
 
 function bindEvents() {
+  elements.scrollToTopButton?.addEventListener("click", handleScrollToTop);
+  elements.selectAllCheckbox?.addEventListener("pointerdown", rememberSelectAllToggleIntent);
+  elements.selectAllCheckbox?.addEventListener("keydown", rememberSelectAllToggleIntent);
+  elements.selectAllCheckbox?.addEventListener("change", handleSelectAllChange);
   elements.ownerDropdownButton.addEventListener("click", handleOwnerDropdownToggle);
   elements.ownerDropdownSearch.addEventListener("input", handleOwnerDropdownSearch);
   elements.ownerDropdownSearch.addEventListener("keydown", handleOwnerDropdownSearchKeydown);
@@ -1916,6 +2041,8 @@ function bindEvents() {
   elements.rowsBody.addEventListener("click", handleRowActionClick);
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("keydown", handleDocumentKeydown);
+  window.addEventListener("resize", updateStickyAlphabetMetrics);
+  window.addEventListener("scroll", updateScrollToTopButtonVisibility, { passive: true });
 
   elements.searchInput.addEventListener("input", applyFilters);
   elements.rivenditoreFilter.addEventListener("change", applyFilters);
@@ -1937,6 +2064,7 @@ async function bootstrap() {
     };
     bindEvents();
     renderAdvancedFilters();
+    updateScrollToTopButtonVisibility();
     await loadOwnerOptions();
 
     const initialOwner = sharedSession.owner || getCachedOwner();

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Listino Prezzi Raw</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="./assets/styles.css?v=20260316-45">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260319-13">
   </head>
   <body>
     <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
@@ -14,6 +14,18 @@
         <span id="loading-overlay-label">Caricamento...</span>
       </div>
     </div>
+
+    <button
+      id="scroll-to-top-button"
+      class="scroll-to-top-button hidden"
+      type="button"
+      aria-label="Torna all'inizio della pagina"
+      title="Torna su"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 5l7 7-1.41 1.41L13 8.83V20h-2V8.83l-4.59 4.58L5 12z"/>
+      </svg>
+    </button>
 
     <div class="page-shell">
       <header class="hero">
@@ -125,7 +137,14 @@
             <table>
               <thead>
                 <tr>
-                  <th class="selection-head" aria-label="Selezione"></th>
+                  <th class="selection-head" aria-label="Selezione">
+                    <input
+                      id="select-all-checkbox"
+                      class="row-selection-checkbox master-selection-checkbox"
+                      type="checkbox"
+                      aria-label="Seleziona o deseleziona tutti i prodotti visibili"
+                    >
+                  </th>
                   <th>Prodotto</th>
                   <th>Rivenditore</th>
                   <th>Categoria</th>
@@ -136,67 +155,67 @@
               <tbody class="entry-body">
                 <tr id="entry-row" class="entry-row">
                   <td class="entry-selection-cell" aria-hidden="true">
-                    <span class="entry-selection-placeholder"></span>
+                <span class="entry-selection-placeholder"></span>
                   </td>
                   <td data-label="Prodotto">
-                    <input form="price-form" name="prodotto" type="text" placeholder="Es. Avena" required>
+                <input form="price-form" name="prodotto" type="text" placeholder="Es. Avena" required>
                   </td>
                   <td data-label="Rivenditore">
-                    <div class="rivenditore-picker">
-                      <input id="rivenditore-hidden-input" name="retailer_id" type="hidden" form="price-form">
-                      <div id="rivenditore-dropdown" class="custom-dropdown">
-                        <button
-                          id="rivenditore-dropdown-button"
-                          class="custom-dropdown-trigger"
-                          type="button"
-                          aria-haspopup="listbox"
-                          aria-expanded="false"
-                        >
-                          <span id="rivenditore-dropdown-label">Rivenditore</span>
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M7 10l5 5 5-5z"/>
-                          </svg>
-                        </button>
-                        <div id="rivenditore-dropdown-panel" class="custom-dropdown-panel hidden">
-                          <input id="rivenditore-dropdown-search" type="search" placeholder="Cerca o crea rivenditore">
-                          <div id="rivenditore-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Rivenditore disponibili"></div>
-                        </div>
-                      </div>
+                <div class="rivenditore-picker">
+                  <input id="rivenditore-hidden-input" name="retailer_id" type="hidden" form="price-form">
+                  <div id="rivenditore-dropdown" class="custom-dropdown">
+                    <button
+                      id="rivenditore-dropdown-button"
+                      class="custom-dropdown-trigger"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                    >
+                      <span id="rivenditore-dropdown-label">Rivenditore</span>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 10l5 5 5-5z"/>
+                      </svg>
+                    </button>
+                    <div id="rivenditore-dropdown-panel" class="custom-dropdown-panel hidden">
+                      <input id="rivenditore-dropdown-search" type="search" placeholder="Cerca o crea rivenditore">
+                      <div id="rivenditore-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Rivenditore disponibili"></div>
                     </div>
+                  </div>
+                </div>
                   </td>
                   <td data-label="Categoria">
-                    <div class="category-picker">
-                      <input id="category-hidden-input" name="categoria" type="hidden" form="price-form">
-                      <div id="category-dropdown" class="custom-dropdown">
-                        <button
-                          id="category-dropdown-button"
-                          class="custom-dropdown-trigger"
-                          type="button"
-                          aria-haspopup="listbox"
-                          aria-expanded="false"
-                        >
-                          <span id="category-dropdown-label">Categoria</span>
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M7 10l5 5 5-5z"/>
-                          </svg>
-                        </button>
-                        <div id="category-dropdown-panel" class="custom-dropdown-panel hidden">
-                          <input id="category-dropdown-search" type="search" placeholder="Cerca o crea categoria">
-                          <div id="category-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Categorie disponibili"></div>
-                        </div>
-                      </div>
+                <div class="category-picker">
+                  <input id="category-hidden-input" name="categoria" type="hidden" form="price-form">
+                  <div id="category-dropdown" class="custom-dropdown">
+                    <button
+                      id="category-dropdown-button"
+                      class="custom-dropdown-trigger"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                    >
+                      <span id="category-dropdown-label">Categoria</span>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7 10l5 5 5-5z"/>
+                      </svg>
+                    </button>
+                    <div id="category-dropdown-panel" class="custom-dropdown-panel hidden">
+                      <input id="category-dropdown-search" type="search" placeholder="Cerca o crea categoria">
+                      <div id="category-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Categorie disponibili"></div>
                     </div>
+                  </div>
+                </div>
                   </td>
                   <td data-label="Prezzo">
-                    <input form="price-form" name="prezzo" type="text" placeholder="Es. 1EUR/l o 7.35EUR/kg" required>
+                <input form="price-form" name="prezzo" type="text" placeholder="Es. 1EUR/l o 7.35EUR/kg" required>
                   </td>
                   <td class="entry-actions-cell" data-label="Azioni">
-                    <div class="entry-actions">
-                      <div class="entry-button-row">
-                        <button id="price-submit-button" class="primary-button compact-button" type="submit" form="price-form">Salva</button>
-                        <button id="price-cancel-button" class="secondary-button compact-button hidden" type="button">Annulla</button>
-                      </div>
-                    </div>
+                <div class="entry-actions">
+                  <div class="entry-button-row">
+                    <button id="price-submit-button" class="primary-button compact-button" type="submit" form="price-form">Salva</button>
+                    <button id="price-cancel-button" class="secondary-button compact-button hidden" type="button">Annulla</button>
+                  </div>
+                </div>
                   </td>
                 </tr>
               </tbody>
@@ -212,7 +231,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./assets/config.js?v=20260316-45"></script>
-    <script src="./assets/app.js?v=20260316-45"></script>
+    <script src="./assets/config.js?v=20260319-13"></script>
+    <script src="./assets/app.js?v=20260319-13"></script>
   </body>
 </html>
