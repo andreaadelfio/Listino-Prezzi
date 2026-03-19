@@ -554,8 +554,14 @@ select {
   padding: 1rem 1.1rem;
 }
 
-.listino-selection-box {
-  margin-top: 1rem;
+.selected-row-item {
+  cursor: pointer;
+  transition: opacity 0.2s, text-decoration 0.2s;
+}
+
+.selected-row-item.crossed-out {
+  text-decoration: line-through;
+  opacity: 0.4;
 }
 
 .selection-box-head {

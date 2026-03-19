@@ -37,7 +37,8 @@ const state = {
   urlSyncPaused: false,
   selectAllWasIndeterminate: false,
   sortKey: "prodotto",
-  sortDirection: "asc"
+  sortDirection: "asc",
+  crossedOutProducts: {}
 };
 
 let feedbackHideTimeoutId = null;
@@ -927,6 +928,7 @@ function clearCurrentOwner() {
   state.filteredProducts = [];
   state.selectedRivenditoreByProduct = {};
   state.checkedProducts = {};
+  state.crossedOutProducts = {};
   setPriceFormMode("create");
   renderRivenditoreControls();
   renderCategoryOptions();
@@ -1269,15 +1271,44 @@ function renderSelectedRowsBox() {
   if (!selectedItems.length) {
     elements.selectedRowsBox.classList.add("hidden");
     elements.selectedRowsCount.textContent = "0 selezionati";
-    elements.selectedRowsList.textContent = "";
+    elements.selectedRowsList.innerHTML = ""; // Cambiato da textContent
     elements.selectedRowsCopyButton.disabled = true;
     return;
   }
 
   elements.selectedRowsCount.textContent = `${selectedItems.length} selezionat${selectedItems.length === 1 ? "o" : "i"}`;
-  elements.selectedRowsList.textContent = buildSelectedRowsClipboardText(selectedItems);
+  
+  // Modificato: invece di usare buildSelectedRowsClipboardText, creiamo dei div cliccabili
+  elements.selectedRowsList.innerHTML = selectedItems.map(({ product, row }) => {
+    const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
+    const text = `${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
+    
+    return `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${text}</div>`;
+  }).join("");
+
   elements.selectedRowsCopyButton.disabled = false;
   elements.selectedRowsBox.classList.remove("hidden");
+}
+
+function handleSelectedRowClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const item = target.closest(".selected-row-item");
+  if (!item) return;
+
+  const product = item.dataset.crossedProduct;
+  if (!product) return;
+
+  // Attiva o disattiva lo stato barrato
+  if (state.crossedOutProducts[product]) {
+    delete state.crossedOutProducts[product];
+  } else {
+    state.crossedOutProducts[product] = true;
+  }
+
+  // Ridisegna il box per applicare la classe CSS
+  renderSelectedRowsBox();
 }
 
 async function handleSelectedRowsCopy() {
@@ -2110,6 +2141,7 @@ function handleSearchReset() {
 
 function bindEvents() {
   elements.scrollToTopButton?.addEventListener("click", handleScrollToTop);
+  elements.selectedRowsList?.addEventListener("click", handleSelectedRowClick);
   elements.selectAllCheckbox?.addEventListener("pointerdown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("keydown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("change", handleSelectAllChange);
