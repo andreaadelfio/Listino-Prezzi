@@ -886,7 +886,7 @@ function rememberSelectAllToggleIntent(event) {
   state.selectAllWasIndeterminate = Boolean(elements.selectAllCheckbox?.indeterminate);
 }
 
-function handleSelectAllChange(event) {
+async function handleSelectAllChange(event) {
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) {
     return;
@@ -898,7 +898,7 @@ function handleSelectAllChange(event) {
     updateSelectAllCheckboxState();
     return;
   }
-
+  
   if (state.selectAllWasIndeterminate) {
     visibleProducts.forEach((product) => {
       delete state.checkedProducts[product];
@@ -913,7 +913,12 @@ function handleSelectAllChange(event) {
       delete state.checkedProducts[product];
     });
   }
-
+  
+  await supabaseClient
+    .from("listino_prezzi_raw")
+    .update({ selected: event.target.checked })
+    .eq("owner", state.currentOwner);
+    
   state.selectAllWasIndeterminate = false;
   persistCheckedProductsForOwner();
   renderRows();
@@ -1421,7 +1426,7 @@ function renderRows() {
             class="row-selection-checkbox"
             data-product="${escapeHtml(group.product)}"
             aria-label="Seleziona ${escapeHtml(group.product)}"
-            ${isChecked ? "checked" : ""}
+            ${state.checkedProducts[group.product] ? "checked" : ""}
           >
         </td>
         <td data-label="Prodotto">${escapeHtml(group.product)}</td>
@@ -1538,6 +1543,7 @@ async function loadRows() {
     .from("listino_prezzi_raw")
     .select(`
       id,
+      selected,
       prodotto,
       retailer_id,
       categoria,
@@ -1556,6 +1562,14 @@ async function loadRows() {
     ...row,
     rivenditore_name: rivenditoreMap.get(String(row.retailer_id)) || "-"
   }));
+
+  state.checkedProducts = {};
+  state.rows.forEach(row => {
+    if (row.selected) {
+      state.checkedProducts[row.prodotto] = true;
+    }
+  });
+
   syncCheckedProducts();
 
   if (state.editingRowId && !findRowById(state.editingRowId)) {
@@ -2011,7 +2025,7 @@ function handleDocumentKeydown(event) {
   }
 }
 
-function handleRowRivenditoreChange(event) {
+async function handleRowRivenditoreChange(event) {
   const target = event.target;
   if (target instanceof HTMLInputElement && target.classList.contains("row-selection-checkbox")) {
     const product = target.dataset.product;
@@ -2024,6 +2038,12 @@ function handleRowRivenditoreChange(event) {
     } else {
       delete state.checkedProducts[product];
     }
+
+    await supabaseClient
+      .from("listino_prezzi_raw")
+      .update({ selected: target.checked })
+      .eq("prodotto", product)
+      .eq("owner", state.currentOwner);
 
     persistCheckedProductsForOwner();
     updateSelectAllCheckboxState();
