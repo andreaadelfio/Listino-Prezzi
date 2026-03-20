@@ -32,9 +32,7 @@ body {
   margin: 0;
   color: var(--ink);
   background:
-    radial-gradient(circle at top left, rgba(166, 75, 42, 0.14), transparent 20rem),
-    radial-gradient(circle at top right, rgba(63, 109, 86, 0.14), transparent 24rem),
-    linear-gradient(180deg, var(--bg-deep), var(--bg));
+    var(--surface);
   font-family: "Avenir Next", "Segoe UI", sans-serif;
   overflow: hidden;
 }
@@ -170,15 +168,15 @@ select {
 
 .panel {
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
+  /* border: 1px solid var(--line);
+  border-radius: var(--radius-lg); */
+  /* box-shadow: var(--shadow); */
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   gap: 0.4rem;
   min-height: 0;
-  padding: 1.1rem;
+  /* padding: 1.1rem; */
 }
 
 .panel-head {
