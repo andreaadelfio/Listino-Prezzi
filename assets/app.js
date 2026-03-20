@@ -1225,7 +1225,6 @@ function renderSelectedRowsBox() {
 
   elements.selectedRowsCount.textContent = `${selectedItems.length} selezionat${selectedItems.length === 1 ? "o" : "i"}`;
   
-  // Modificato: invece di usare buildSelectedRowsClipboardText, creiamo dei div cliccabili
   elements.selectedRowsList.innerHTML = selectedItems.map(({ product, row }) => {
     const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
     const text = `${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
@@ -1353,7 +1352,7 @@ function renderRows() {
         </tr>
       `
       : "";
-      
+
     previousLetter = alphaLetter;
 
     return `
