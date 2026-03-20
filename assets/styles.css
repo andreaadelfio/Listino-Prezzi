@@ -547,7 +547,7 @@ select {
 }
 
 .selection-panel.reduced {
-  max-height: 5rem;
+  max-height: 15rem;
 }
 
 .selected-row-item {
@@ -589,7 +589,7 @@ select {
 
 .selection-plain-list {
   margin: 0;
-  max-height: 15rem;
+  max-height: 25rem;
   padding: 0.8rem 0.9rem;
   overflow: auto;
   border: 1px solid rgba(166, 75, 42, 0.14);
