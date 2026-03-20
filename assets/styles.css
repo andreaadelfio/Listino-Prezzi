@@ -329,6 +329,8 @@ select {
   background: var(--surface-strong);
   color: var(--accent-deep);
   font-size: 0.82rem;
+  width: max-content;
+
 }
 
 .table-toolbar {
@@ -466,7 +468,6 @@ select {
 
 .panel-owner-inline .owner-field .custom-dropdown {
   width: auto;
-  min-width: 10.5rem;
 }
 
 .feedback {
