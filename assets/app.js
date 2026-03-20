@@ -94,6 +94,7 @@ const elements = {
   selectedRowsList: document.querySelector("#selected-rows-list"),
   selectedRowsCopyButton: document.querySelector("#selected-rows-copy-button"),
   selectAllCheckbox: document.querySelector("#select-all-checkbox"),
+  selectedRowsToggleSize: document.querySelector("#selected-rows-toggle-size"),
   sortButtons: [...document.querySelectorAll(".sort-button")],
   sortHeaders: [...document.querySelectorAll("th[data-sort-column]")]
 };
@@ -1587,6 +1588,16 @@ async function refreshData() {
   }
 }
 
+function handleSelectedRowsToggleSize() {
+  const box = elements.selectedRowsBox;
+  if (!box) return;
+
+  box.classList.toggle("reduced");
+
+  elements.selectedRowsToggleSize.textContent =
+    box.classList.contains("reduced") ? "↑" : "↓";
+}
+
 async function resolveRivenditoreForSubmit() {
   if (!state.currentOwner) {
     throw new Error("Seleziona prima un owner.");
@@ -2162,6 +2173,7 @@ function bindEvents() {
   elements.categoryDropdownOptions.addEventListener("click", handleCategoryDropdownOptionClick);
   elements.rowsBody.addEventListener("change", handleRowRivenditoreChange);
   elements.rowsBody.addEventListener("click", handleRowActionClick);
+  elements.selectedRowsToggleSize?.addEventListener("click", handleSelectedRowsToggleSize);
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("keydown", handleDocumentKeydown);
   window.addEventListener("resize", updateStickyAlphabetMetrics);
