@@ -48,7 +48,7 @@ select {
 }
 
 .page-shell {
-  width: min(1010px, calc(100vw - 1.5rem));
+  width: min(965px, calc(100vw - 1.5rem));
   margin: 0 auto;
   height: 100dvh;
   display: flex;
