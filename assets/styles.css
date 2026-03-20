@@ -744,8 +744,8 @@ th {
 }
 
 .compact-button {
-  min-height: 2.6rem;
-  padding: 0.65rem 0.95rem;
+  /* min-height: 2.6rem; */
+  padding: 0.4rem 0.4rem;
 }
 
 .entry-note {
