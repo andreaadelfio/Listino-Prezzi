@@ -756,9 +756,9 @@ th {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.5rem;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
+  width: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
   padding: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
