@@ -10,7 +10,6 @@ const SESSION_URL_PARAM_KEYS = Object.freeze({
   retailerFilter: "rf",
   categoryFilter: "cf",
   advancedFilters: "af",
-  selectedRows: "sel",
   sortKey: "sk",
   sortDirection: "sd"
 });
@@ -331,55 +330,6 @@ function getCheckedProductsCacheMap() {
   }
 }
 
-function writeCheckedProductsCacheMap(cacheMap) {
-  try {
-    if (!cacheMap || !Object.keys(cacheMap).length) {
-      window.localStorage.removeItem(CHECKED_PRODUCTS_CACHE_KEY);
-      return;
-    }
-
-    window.localStorage.setItem(CHECKED_PRODUCTS_CACHE_KEY, JSON.stringify(cacheMap));
-  } catch {
-    // Ignora eventuali limiti del browser sullo storage.
-  }
-}
-
-function restoreCheckedProductsForOwner(owner = state.currentOwner) {
-  const normalizedOwnerKey = normalizeOwnerKey(owner);
-  if (!normalizedOwnerKey) {
-    state.checkedProducts = {};
-    return;
-  }
-
-  const cacheMap = getCheckedProductsCacheMap();
-  const cachedProducts = Array.isArray(cacheMap[normalizedOwnerKey]) ? cacheMap[normalizedOwnerKey] : [];
-  state.checkedProducts = Object.fromEntries(
-    cachedProducts
-      .map((product) => String(product || "").trim())
-      .filter(Boolean)
-      .map((product) => [product, true])
-  );
-}
-
-function persistCheckedProductsForOwner(owner = state.currentOwner) {
-  const normalizedOwnerKey = normalizeOwnerKey(owner);
-  if (!normalizedOwnerKey) {
-    return;
-  }
-
-  const cacheMap = getCheckedProductsCacheMap();
-  const checkedProducts = Object.keys(state.checkedProducts)
-    .filter((product) => state.checkedProducts[product])
-    .sort((a, b) => a.localeCompare(b, "it"));
-
-  if (checkedProducts.length) {
-    cacheMap[normalizedOwnerKey] = checkedProducts;
-  } else {
-    delete cacheMap[normalizedOwnerKey];
-  }
-
-  writeCheckedProductsCacheMap(cacheMap);
-}
 
 async function withUrlSyncPaused(callback) {
   const previousValue = state.urlSyncPaused;
@@ -419,7 +369,6 @@ function readSessionStateFromUrl() {
     retailerFilterId: String(params.get(SESSION_URL_PARAM_KEYS.retailerFilter) || "").trim(),
     category: String(params.get(SESSION_URL_PARAM_KEYS.categoryFilter) || "").trim(),
     advancedFiltersOpen: params.get(SESSION_URL_PARAM_KEYS.advancedFilters) === "1",
-    selectedRowIds: decodeSelectedRowsFromUrl(params.get(SESSION_URL_PARAM_KEYS.selectedRows)),
     sortKey: normalizeSortKey(params.get(SESSION_URL_PARAM_KEYS.sortKey)),
     sortDirection: normalizeSortDirection(params.get(SESSION_URL_PARAM_KEYS.sortDirection))
   };
@@ -464,9 +413,6 @@ function syncUrlState() {
   if (sessionState.advancedFiltersOpen) {
     url.searchParams.set(SESSION_URL_PARAM_KEYS.advancedFilters, "1");
   }
-  if (sessionState.selectedRows) {
-    url.searchParams.set(SESSION_URL_PARAM_KEYS.selectedRows, sessionState.selectedRows);
-  }
   if (sessionState.sortKey !== "prodotto" || sessionState.sortDirection !== "asc") {
     url.searchParams.set(SESSION_URL_PARAM_KEYS.sortKey, sessionState.sortKey);
     url.searchParams.set(SESSION_URL_PARAM_KEYS.sortDirection, sessionState.sortDirection);
@@ -481,7 +427,6 @@ function syncUrlState() {
 
 function applySessionStateFromUrl(sessionState) {
   state.selectedRivenditoreByProduct = {};
-  state.checkedProducts = {};
 
   if (elements.searchInput) {
     elements.searchInput.value = sessionState.search || "";
@@ -503,10 +448,8 @@ function applySessionStateFromUrl(sessionState) {
     }
 
     state.selectedRivenditoreByProduct[row.prodotto] = String(row.retailer_id);
-    state.checkedProducts[row.prodotto] = true;
   });
 
-  persistCheckedProductsForOwner(state.currentOwner);
   applyFilters({ syncUrl: false });
 }
 
@@ -673,7 +616,6 @@ function syncCheckedProducts() {
   state.checkedProducts = Object.fromEntries(
     Object.entries(state.checkedProducts).filter(([product, checked]) => checked && availableProducts.has(product))
   );
-  persistCheckedProductsForOwner();
 }
 
 function setOwnerStatus(message, type = "neutral") {
@@ -918,9 +860,8 @@ async function handleSelectAllChange(event) {
     .from("listino_prezzi_raw")
     .update({ selected: event.target.checked })
     .eq("owner", state.currentOwner);
-    
+
   state.selectAllWasIndeterminate = false;
-  persistCheckedProductsForOwner();
   renderRows();
   syncUrlState();
 }
@@ -1306,14 +1247,12 @@ function handleSelectedRowClick(event) {
   const product = item.dataset.crossedProduct;
   if (!product) return;
 
-  // Attiva o disattiva lo stato barrato
   if (state.crossedOutProducts[product]) {
     delete state.crossedOutProducts[product];
   } else {
     state.crossedOutProducts[product] = true;
   }
 
-  // Ridisegna il box per applicare la classe CSS
   renderSelectedRowsBox();
 }
 
@@ -1414,7 +1353,7 @@ function renderRows() {
         </tr>
       `
       : "";
-
+      
     previousLetter = alphaLetter;
 
     return `
@@ -1426,7 +1365,7 @@ function renderRows() {
             class="row-selection-checkbox"
             data-product="${escapeHtml(group.product)}"
             aria-label="Seleziona ${escapeHtml(group.product)}"
-            ${state.checkedProducts[group.product] ? "checked" : ""}
+            ${isChecked ? "checked" : ""}
           >
         </td>
         <td data-label="Prodotto">${escapeHtml(group.product)}</td>
@@ -1570,7 +1509,6 @@ async function loadRows() {
     }
   });
 
-  syncCheckedProducts();
 
   if (state.editingRowId && !findRowById(state.editingRowId)) {
     setPriceFormMode("create");
@@ -1726,7 +1664,6 @@ async function applyOwnerSelection(owner, options = {}) {
   state.ownerSearchTerm = "";
   cacheOwner(canonicalOwner);
   state.selectedRivenditoreByProduct = {};
-  restoreCheckedProductsForOwner(canonicalOwner);
   setPriceFormMode("create");
   renderOwnerSelect();
   renderSelectedRowsBox();
@@ -1807,7 +1744,6 @@ async function handlePriceSubmit(event) {
         if (state.checkedProducts[previousRow.prodotto]) {
           delete state.checkedProducts[previousRow.prodotto];
           state.checkedProducts[prodotto] = true;
-          persistCheckedProductsForOwner();
         }
       }
 
@@ -2045,10 +1981,8 @@ async function handleRowRivenditoreChange(event) {
       .eq("prodotto", product)
       .eq("owner", state.currentOwner);
 
-    persistCheckedProductsForOwner();
     updateSelectAllCheckboxState();
     renderSelectedRowsBox();
-    syncUrlState();
     return;
   }
 
