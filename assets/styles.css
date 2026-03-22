@@ -48,7 +48,7 @@ select {
 }
 
 .page-shell {
-  width: min(965px, calc(100vw - 1.5rem));
+  width: min(100%, 90vw);
   margin: 0 auto;
   height: 100dvh;
   display: flex;
@@ -229,6 +229,8 @@ select {
   border-radius: var(--radius-md);
   background: var(--surface-strong);
   box-shadow: var(--shadow);
+  width: max-content;
+
 }
 
 .custom-dropdown-panel input {
@@ -243,6 +245,7 @@ select {
 }
 
 .custom-dropdown-option {
+  text-align: left;
   width: 100%;
   min-height: 2.6rem;
   display: flex;
@@ -595,6 +598,7 @@ select {
 
 .table-wrap {
   flex: 1 1 auto;
+  width: 100%;
   min-height: 0;
   overflow-x: auto;
   overflow-y: auto;
@@ -604,7 +608,7 @@ select {
 }
 
 table {
-  width: max-content;
+  width: 100%;
   border-collapse: collapse;
 }
 
@@ -679,10 +683,56 @@ th {
 .selection-head,
 .selection-cell,
 .entry-selection-cell {
-  width: 3.25rem;
-  min-width: 3.25rem;
+  /* width: 3.25rem; */
+  /* min-width: 3.25rem;
+  max-width: 3.2rem; */
   text-align: center;
   vertical-align: middle;
+}
+
+th[data-sort-column="prezzo"],
+td[data-label="Prezzo"] {
+  /* width: 9rem;        
+  min-width: 8.5rem;
+  max-width: 11rem;
+  white-space: nowrap; */
+  text-align: right;
+}
+
+th:last-child,
+td.entry-actions-cell {
+  width: max-content;          /* 9.5–12rem è il range più comodo */
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.search-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-input-wrapper input {
+  width: 100%;
+  padding-left: 2.4rem;           /* spazio per l'icona a sinistra */
+  padding-right: 0.8rem;
+  /* mantieni gli altri stili esistenti: border, background, etc. */
+}
+
+.search-icon {
+  position: absolute;
+  left: 0.7rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1.1rem;                  /* 16–18px è ideale */
+  height: 1.1rem;
+  color: var(--ink-soft);         /* grigio morbido, o var(--accent) se vuoi più visibile */
+  pointer-events: none;           /* non interferisce con il click sull'input */
+}
+
+/* Opzionale: icona più scura quando l'input è focused */
+.search-input-wrapper input:focus + .search-icon {
+  color: var(--accent-deep);
 }
 
 .entry-selection-placeholder {
@@ -724,6 +774,7 @@ th {
 
 .entry-actions {
   display: grid;
+  flex-wrap: nowrap !important;
   gap: 0.55rem;
 }
 

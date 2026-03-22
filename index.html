@@ -74,9 +74,13 @@
           <div class="table-controls">
             <div class="table-search-row">
               <div class="field table-search-field">
-                <span>Ricerca</span>
                 <div class="table-search-inline">
-                  <input id="search-input" type="search" placeholder="Cerca un prodotto, rivenditore, categoria, prezzo">
+                  <div class="search-input-wrapper">
+                    <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M21 21L15.0001 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <input id="search-input" type="search" placeholder="Cerca un prodotto, rivenditore, categoria, prezzo">
+                  </div>
                   <div class="table-search-actions">
                     <button
                       id="advanced-toggle-button"
@@ -215,7 +219,7 @@
                 </div>
                   </td>
                   <td data-label="Prezzo">
-                <input form="price-form" name="prezzo" type="text" placeholder="Es. 1€/l o 7.€/kg" required>
+                <input form="price-form" name="prezzo" type="text" placeholder="Es. 1€/l" required>
                   </td>
                   <td class="entry-actions-cell" data-label="Azioni">
                 <div class="entry-actions">
