@@ -703,6 +703,80 @@ td[data-label="Prezzo"] {
   text-align: right;
 }
 
+.product-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.product-name {
+  min-width: 0;
+}
+
+.quantity-control {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-width: 3.9rem;
+  border: 1px solid rgba(31, 42, 36, 0.12);
+  border-radius: 0.75rem;
+  background: rgba(255, 250, 244, 0.98);
+  overflow: hidden;
+}
+
+.quantity-input {
+  width: 2.45rem;
+  min-width: 2.45rem;
+  padding: 0.3rem 0.2rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.quantity-input::-webkit-outer-spin-button,
+.quantity-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.quantity-stepper {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(31, 42, 36, 0.08);
+}
+
+.quantity-step-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  min-width: 1.25rem;
+  height: 0.95rem;
+  padding: 0;
+  border: 0;
+  background: rgba(244, 239, 231, 0.85);
+  color: var(--ink-soft);
+  font-size: 0.58rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.quantity-step-button + .quantity-step-button {
+  border-top: 1px solid rgba(31, 42, 36, 0.08);
+}
+
+.quantity-step-button:hover {
+  background: rgba(166, 75, 42, 0.1);
+  color: var(--accent-deep);
+}
+
 th:last-child,
 td.entry-actions-cell {
   width: max-content;
@@ -765,6 +839,7 @@ td.entry-actions-cell {
   vertical-align: middle;
   box-shadow: inset 0 -1px 0 rgba(31, 42, 36, 0.08);
 }
+
 
 .entry-actions-cell {
   min-width: 9.5rem;

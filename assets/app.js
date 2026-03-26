@@ -1,6 +1,7 @@
-const APP_VERSION = "20260326-2";
+const APP_VERSION = "20260326-5";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
+const QUANTITY_UPDATE_DEBOUNCE_MS = 650;
 const OWNER_CACHE_KEY = "listino-owner-cache";
 const CHECKED_PRODUCTS_CACHE_KEY = "listino-checked-products-cache";
 const SORTABLE_COLUMN_KEYS = Object.freeze(["prodotto", "rivenditore", "categoria", "prezzo"]);
@@ -44,6 +45,7 @@ let feedbackHideTimeoutId = null;
 let feedbackAnimationFrameId = null;
 let alphabetHighlightTimeoutId = null;
 let loadingRequestCount = 0;
+const quantityUpdateTimeoutIds = new Map();
 
 const elements = {
   loadingOverlay: document.querySelector("#loading-overlay"),
@@ -242,6 +244,14 @@ function parsePriceText(priceText) {
   };
 }
 
+function normalizeQuantity(value, fallback = 1) {
+  const parsedValue = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return fallback;
+  }
+  return parsedValue;
+}
+
 function getSortablePriceValue(row) {
   if (!row) {
     return Number.POSITIVE_INFINITY;
@@ -261,6 +271,10 @@ function compareRowsByBestPrice(rowA, rowB) {
   const nameA = String(rowA?.rivenditore_name || "");
   const nameB = String(rowB?.rivenditore_name || "");
   return nameA.localeCompare(nameB, "it");
+}
+
+function getRowQuantityValue(row) {
+  return normalizeQuantity(row?.quantity, 1);
 }
 
 function normalizeOwnerValue(value) {
@@ -506,6 +520,10 @@ function normalizeRivenditoreName(value) {
 
 function findRowById(rowId) {
   return state.rows.find((row) => String(row.id) === String(rowId)) || null;
+}
+
+function findGroupByProduct(product) {
+  return state.filteredProducts.find((group) => group.product === product) || null;
 }
 
 function findRivenditoreByName(name) {
@@ -1182,8 +1200,72 @@ function getSelectedProductSummaries() {
 
 function buildSelectedRowsClipboardText(selectedItems = getSelectedProductSummaries()) {
   return selectedItems
-    .map(({ product, row }) => `${product} | ${row.rivenditore_name || "-"} | ${row.prezzo || "-"}`)
+    .map(({ product, row }) => `${getRowQuantityValue(row)}x ${product} | ${row.rivenditore_name || "-"} | ${row.prezzo || "-"}`)
     .join("\n");
+}
+
+function updateLocalQuantityForProduct(product, quantity) {
+  const normalizedQuantity = normalizeQuantity(quantity, 1);
+
+  state.rows = state.rows.map((row) => (
+    row.prodotto === product
+      ? { ...row, quantity: normalizedQuantity }
+      : row
+  ));
+
+  state.filteredProducts = state.filteredProducts.map((group) => {
+    if (group.product !== product) {
+      return group;
+    }
+
+    const updatedRows = group.rows.map((row) => ({ ...row, quantity: normalizedQuantity }));
+    const selectedRow = updatedRows.find(
+      (row) => String(row.retailer_id) === String(group.selectedRivenditoreId)
+    ) || updatedRows[0];
+
+    return {
+      ...group,
+      rows: updatedRows,
+      selectedRow
+    };
+  });
+}
+
+function scheduleQuantityUpdate(product, quantity) {
+  const normalizedQuantity = normalizeQuantity(quantity, 1);
+
+  if (quantityUpdateTimeoutIds.has(product)) {
+    window.clearTimeout(quantityUpdateTimeoutIds.get(product));
+  }
+
+  const timeoutId = window.setTimeout(async () => {
+    quantityUpdateTimeoutIds.delete(product);
+
+    if (!state.currentOwner) {
+      return;
+    }
+
+    try {
+      await persistQuantityForProduct(product, normalizedQuantity);
+    } catch (error) {
+      showFeedback(`Aggiornamento quantita fallito: ${error.message}`, "error");
+    }
+  }, QUANTITY_UPDATE_DEBOUNCE_MS);
+
+  quantityUpdateTimeoutIds.set(product, timeoutId);
+}
+
+async function persistQuantityForProduct(product, quantity) {
+  const normalizedQuantity = normalizeQuantity(quantity, 1);
+  const { error } = await supabaseClient
+    .from("listino_prezzi_raw")
+    .update({ quantity: normalizedQuantity })
+    .eq("owner", state.currentOwner)
+    .eq("prodotto", product);
+
+  if (error) {
+    throw error;
+  }
 }
 
 async function copyTextToClipboard(text) {
@@ -1230,7 +1312,7 @@ function renderSelectedRowsBox() {
   
   elements.selectedRowsList.innerHTML = selectedItems.map(({ product, row }) => {
     const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
-    const text = `${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
+    const text = `${escapeHtml(getRowQuantityValue(row))}x ${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
     
     return `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${text}</div>`;
   }).join("");
@@ -1293,10 +1375,17 @@ async function handleSelectedRowsClear() {
   }
 
   try {
+    crossedProducts.forEach((product) => {
+      if (quantityUpdateTimeoutIds.has(product)) {
+        window.clearTimeout(quantityUpdateTimeoutIds.get(product));
+        quantityUpdateTimeoutIds.delete(product);
+      }
+    });
+
     if (state.currentOwner) {
       const { error } = await supabaseClient
         .from("listino_prezzi_raw")
-        .update({ selected: false })
+        .update({ selected: false, quantity: normalizeQuantity(1) })
         .eq("owner", state.currentOwner)
         .in("prodotto", crossedProducts);
 
@@ -1312,13 +1401,13 @@ async function handleSelectedRowsClear() {
 
     state.rows = state.rows.map((row) => (
       crossedProducts.includes(row.prodotto)
-        ? { ...row, selected: false }
+        ? { ...row, selected: false , quantity: normalizeQuantity(1) }
         : row
     ));
 
-    renderRows();
+    applyFilters({ syncUrl: false });
     syncUrlState();
-    showFeedback("Selezionati barrati rimossi dal box.");
+    showFeedback("Selezionati barrati rimossi e quantita riportata a 1.");
   } catch (error) {
     showFeedback(`Rimozione selezionati barrati fallita: ${error.message}`, "error");
   }
@@ -1354,6 +1443,7 @@ function applyFilters(options = {}) {
     const haystack = group.rows
       .flatMap((row) => [
         row.prodotto,
+        String(getRowQuantityValue(row)),
         row.prezzo,
         row.categoria,
         row.rivenditore_name,
@@ -1394,6 +1484,7 @@ function renderRows() {
     const row = group.selectedRow;
     const isChecked = Boolean(state.checkedProducts[group.product]);
     const alphaLetter = getProductAlphabetLetter(group.product);
+    const quantity = getRowQuantityValue(row);
     const rivenditoreOptions = group.rows.map((optionRow) => `
       <option value="${optionRow.retailer_id}" ${String(optionRow.retailer_id) === group.selectedRivenditoreId ? "selected" : ""}>
         ${escapeHtml(optionRow.rivenditore_name)}
@@ -1422,7 +1513,49 @@ function renderRows() {
             ${isChecked ? "checked" : ""}
           >
         </td>
-        <td data-label="Prodotto">${escapeHtml(group.product)}</td>
+        <td data-label="Prodotto">
+          <div class="product-cell">
+            <div class="quantity-control">
+              <input
+                type="number"
+                class="quantity-input row-quantity-input"
+                data-product="${escapeHtml(group.product)}"
+                min="1"
+                step="1"
+                inputmode="numeric"
+                value="${quantity}"
+                aria-label="Quantita per ${escapeHtml(group.product)}"
+              >
+              <div class="quantity-stepper" aria-hidden="true">
+                <button
+                  type="button"
+                  class="quantity-step-button"
+                  data-action="quantity-step"
+                  data-product="${escapeHtml(group.product)}"
+                  data-step="1"
+                  tabindex="-1"
+                  aria-label="Aumenta quantita di ${escapeHtml(group.product)}"
+                  title="Aumenta quantita"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  class="quantity-step-button"
+                  data-action="quantity-step"
+                  data-product="${escapeHtml(group.product)}"
+                  data-step="-1"
+                  tabindex="-1"
+                  aria-label="Diminuisci quantita di ${escapeHtml(group.product)}"
+                  title="Diminuisci quantita"
+                >
+                  ▼
+                </button>
+              </div>
+            </div>
+            <span class="product-name">${escapeHtml(group.product)}</span>
+          </div>
+        </td>
         <td data-label="Rivenditore">
           <select class="row-rivenditore-select" data-product="${escapeHtml(group.product)}">
             ${rivenditoreOptions}
@@ -1537,6 +1670,7 @@ async function loadRows() {
     .select(`
       id,
       selected,
+      quantity,
       prodotto,
       retailer_id,
       categoria,
@@ -1553,6 +1687,7 @@ async function loadRows() {
   const rivenditoreMap = new Map(state.rivenditores.map((rivenditore) => [String(rivenditore.id), rivenditore.name]));
   state.rows = (data || []).map((row) => ({
     ...row,
+    quantity: normalizeQuantity(row.quantity, 1),
     rivenditore_name: rivenditoreMap.get(String(row.retailer_id)) || "-"
   }));
 
@@ -2040,6 +2175,20 @@ async function handleRowRivenditoreChange(event) {
     return;
   }
 
+  if (target instanceof HTMLInputElement && target.classList.contains("row-quantity-input")) {
+    const product = target.dataset.product;
+    if (!product) {
+      return;
+    }
+
+    const normalizedQuantity = normalizeQuantity(target.value, 1);
+    target.value = String(normalizedQuantity);
+    updateLocalQuantityForProduct(product, normalizedQuantity);
+    renderSelectedRowsBox();
+    scheduleQuantityUpdate(product, normalizedQuantity);
+    return;
+  }
+
   if (!(target instanceof HTMLSelectElement) || !target.classList.contains("row-rivenditore-select")) {
     return;
   }
@@ -2108,6 +2257,30 @@ async function handleRowActionClick(event) {
     return;
   }
 
+  if (button.dataset.action === "quantity-step") {
+    const product = String(button.dataset.product || "").trim();
+    const step = Number.parseInt(String(button.dataset.step || "0"), 10);
+    if (!product || !Number.isFinite(step) || step === 0) {
+      return;
+    }
+
+    const group = findGroupByProduct(product);
+    const nextQuantity = Math.max(1, getRowQuantityValue(group?.selectedRow) + step);
+    updateLocalQuantityForProduct(product, nextQuantity);
+
+    elements.rowsBody
+      ?.querySelectorAll(".row-quantity-input")
+      .forEach((inputElement) => {
+        if (inputElement instanceof HTMLInputElement && inputElement.dataset.product === product) {
+          inputElement.value = String(nextQuantity);
+        }
+      });
+
+    renderSelectedRowsBox();
+    scheduleQuantityUpdate(product, nextQuantity);
+    return;
+  }
+
   const rowId = button.dataset.rowId;
   if (!rowId) {
     return;
@@ -2157,6 +2330,28 @@ function handleSearchReset() {
   applyFilters();
 }
 
+function handleRowsBodyInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || !target.classList.contains("row-quantity-input")) {
+    return;
+  }
+
+  const product = target.dataset.product;
+  if (!product) {
+    return;
+  }
+
+  const rawValue = String(target.value || "").trim();
+  if (!/^\d+$/.test(rawValue)) {
+    return;
+  }
+
+  const normalizedQuantity = normalizeQuantity(rawValue, 1);
+  updateLocalQuantityForProduct(product, normalizedQuantity);
+  renderSelectedRowsBox();
+  scheduleQuantityUpdate(product, normalizedQuantity);
+}
+
 function bindEvents() {
   elements.scrollToTopButton?.addEventListener("click", handleScrollToTop);
   elements.selectedRowsList?.addEventListener("click", handleSelectedRowClick);
@@ -2180,6 +2375,7 @@ function bindEvents() {
   elements.categoryDropdownButton.addEventListener("click", handleCategoryDropdownToggle);
   elements.categoryDropdownSearch.addEventListener("input", handleCategoryDropdownSearch);
   elements.categoryDropdownOptions.addEventListener("click", handleCategoryDropdownOptionClick);
+  elements.rowsBody.addEventListener("input", handleRowsBodyInput);
   elements.rowsBody.addEventListener("change", handleRowRivenditoreChange);
   elements.rowsBody.addEventListener("click", handleRowActionClick);
   elements.selectedRowsToggleSize?.addEventListener("click", handleSelectedRowsToggleSize);

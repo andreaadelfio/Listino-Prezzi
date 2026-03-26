@@ -24,6 +24,7 @@ create table if not exists public.listino_prezzi_raw (
   owner text not null default 'default',
   prodotto text not null,
   retailer_id bigint not null references public.retailers(id) on delete restrict,
+  quantity integer not null default 1 check (quantity >= 1),
   categoria text,
   prezzo text not null,
   prezzo_valore numeric(10, 2),
@@ -42,6 +43,9 @@ add column if not exists owner text;
 alter table public.listino_prezzi_raw
 add column if not exists owner text;
 
+alter table public.listino_prezzi_raw
+add column if not exists quantity integer;
+
 update public.retailers
 set owner = 'default'
 where owner is null or btrim(owner) = '';
@@ -56,6 +60,10 @@ update public.listino_prezzi_raw
 set owner = 'default'
 where owner is null or btrim(owner) = '';
 
+update public.listino_prezzi_raw
+set quantity = 1
+where quantity is null or quantity < 1;
+
 alter table public.retailers
 alter column owner set default 'default';
 
@@ -67,6 +75,12 @@ alter column owner set default 'default';
 
 alter table public.listino_prezzi_raw
 alter column owner set not null;
+
+alter table public.listino_prezzi_raw
+alter column quantity set default 1;
+
+alter table public.listino_prezzi_raw
+alter column quantity set not null;
 
 alter table public.retailers
 drop constraint if exists retailers_name_key;
@@ -96,6 +110,7 @@ select
   l.id,
   l.owner,
   l.prodotto,
+  l.quantity,
   r.name as rivenditore,
   concat(l.prodotto, '-', r.name) as prod_riv,
   l.categoria,
