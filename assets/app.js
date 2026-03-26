@@ -1,4 +1,4 @@
-const APP_VERSION = "20260319-28";
+const APP_VERSION = "20260326-2";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const OWNER_CACHE_KEY = "listino-owner-cache";
@@ -92,6 +92,7 @@ const elements = {
   selectedRowsCount: document.querySelector("#selected-rows-count"),
   selectedRowsList: document.querySelector("#selected-rows-list"),
   selectedRowsCopyButton: document.querySelector("#selected-rows-copy-button"),
+  selectedRowsClearButton: document.querySelector("#selected-rows-clear-button"),
   selectAllCheckbox: document.querySelector("#select-all-checkbox"),
   selectedRowsToggleSize: document.querySelector("#selected-rows-toggle-size"),
   sortButtons: [...document.querySelectorAll(".sort-button")],
@@ -1210,7 +1211,7 @@ async function copyTextToClipboard(text) {
 }
 
 function renderSelectedRowsBox() {
-  if (!elements.selectedRowsBox || !elements.selectedRowsCount || !elements.selectedRowsList || !elements.selectedRowsCopyButton) {
+  if (!elements.selectedRowsBox || !elements.selectedRowsCount || !elements.selectedRowsList || !elements.selectedRowsCopyButton || !elements.selectedRowsClearButton) {
     return;
   }
 
@@ -1220,6 +1221,8 @@ function renderSelectedRowsBox() {
     elements.selectedRowsCount.textContent = "0 selezionati";
     elements.selectedRowsList.innerHTML = ""; // Cambiato da textContent
     elements.selectedRowsCopyButton.disabled = true;
+    elements.selectedRowsClearButton.disabled = true;
+    elements.selectedRowsClearButton.classList.add("hidden");
     return;
   }
 
@@ -1232,7 +1235,10 @@ function renderSelectedRowsBox() {
     return `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${text}</div>`;
   }).join("");
 
+  const crossedProducts = selectedItems.filter(({ product }) => Boolean(state.crossedOutProducts[product]));
   elements.selectedRowsCopyButton.disabled = false;
+  elements.selectedRowsClearButton.disabled = crossedProducts.length === 0;
+  elements.selectedRowsClearButton.classList.toggle("hidden", crossedProducts.length === 0);
   elements.selectedRowsBox.classList.remove("hidden");
 }
 
@@ -1266,6 +1272,55 @@ async function handleSelectedRowsCopy() {
     showFeedback("Selezionati copiati.");
   } catch (error) {
     showFeedback(`Copia fallita: ${error.message}`, "error");
+  }
+}
+
+async function handleSelectedRowsClear() {
+  const selectedItems = getSelectedProductSummaries();
+  if (!selectedItems.length) {
+    return;
+  }
+
+  const crossedProducts = [...new Set(
+    selectedItems
+      .filter(({ product }) => Boolean(state.crossedOutProducts[product]))
+      .map(({ product }) => String(product || "").trim())
+      .filter(Boolean)
+  )];
+
+  if (!crossedProducts.length) {
+    return;
+  }
+
+  try {
+    if (state.currentOwner) {
+      const { error } = await supabaseClient
+        .from("listino_prezzi_raw")
+        .update({ selected: false })
+        .eq("owner", state.currentOwner)
+        .in("prodotto", crossedProducts);
+
+      if (error) {
+        throw error;
+      }
+    }
+
+    crossedProducts.forEach((product) => {
+      delete state.checkedProducts[product];
+      delete state.crossedOutProducts[product];
+    });
+
+    state.rows = state.rows.map((row) => (
+      crossedProducts.includes(row.prodotto)
+        ? { ...row, selected: false }
+        : row
+    ));
+
+    renderRows();
+    syncUrlState();
+    showFeedback("Selezionati barrati rimossi dal box.");
+  } catch (error) {
+    showFeedback(`Rimozione selezionati barrati fallita: ${error.message}`, "error");
   }
 }
 
@@ -2115,6 +2170,7 @@ function bindEvents() {
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceCancelButton.addEventListener("click", handleCancelEdit);
   elements.selectedRowsCopyButton?.addEventListener("click", handleSelectedRowsCopy);
+  elements.selectedRowsClearButton?.addEventListener("click", handleSelectedRowsClear);
   elements.advancedToggleButton.addEventListener("click", handleAdvancedToggle);
   elements.alphabetIndex?.addEventListener("click", handleAlphabetIndexClick);
   elements.refreshButton.addEventListener("click", refreshData);
