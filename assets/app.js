@@ -7,10 +7,6 @@ const CHECKED_PRODUCTS_CACHE_KEY = "listino-checked-products-cache";
 const SORTABLE_COLUMN_KEYS = Object.freeze(["prodotto", "rivenditore", "categoria", "prezzo"]);
 const SESSION_URL_PARAM_KEYS = Object.freeze({
   owner: "o",
-  search: "q",
-  retailerFilter: "rf",
-  categoryFilter: "cf",
-  advancedFilters: "af",
   sortKey: "sk",
   sortDirection: "sd"
 });
@@ -33,12 +29,12 @@ const state = {
   formCategoryValue: "",
   categoryDropdownOpen: false,
   categorySearchTerm: "",
-  advancedFiltersOpen: false,
   urlSyncPaused: false,
   selectAllWasIndeterminate: false,
   sortKey: "prodotto",
   sortDirection: "asc",
-  crossedOutProducts: {}
+  crossedOutProducts: {},
+  formSearchTerm: ""
 };
 
 let feedbackHideTimeoutId = null;
@@ -61,17 +57,12 @@ const elements = {
   refreshButton: document.querySelector("#refresh-button"),
   priceForm: document.querySelector("#price-form"),
   priceSubmitButton: document.querySelector("#price-submit-button"),
+  priceResetFiltersButton: document.querySelector("#price-reset-filters-button"),
   priceCancelButton: document.querySelector("#price-cancel-button"),
-  advancedToggleButton: document.querySelector("#advanced-toggle-button"),
-  advancedFilters: document.querySelector("#advanced-filters"),
   alphabetIndexWrap: document.querySelector(".alphabet-index-wrap"),
   alphabetIndex: document.querySelector("#alphabet-index"),
   tableWrap: document.querySelector(".table-wrap"),
   tableHead: document.querySelector("thead"),
-  rivenditoreFilter: document.querySelector("#rivenditore-filter"),
-  categoryFilter: document.querySelector("#category-filter"),
-  searchInput: document.querySelector("#search-input"),
-  searchResetButton: document.querySelector("#search-reset-button"),
   rivenditoreHiddenInput: document.querySelector("#rivenditore-hidden-input"),
   rivenditoreDropdown: document.querySelector("#rivenditore-dropdown"),
   rivenditoreDropdownButton: document.querySelector("#rivenditore-dropdown-button"),
@@ -392,10 +383,6 @@ function readSessionStateFromUrl() {
 function buildSessionStateForUrl() {
   return {
     owner: normalizeOwnerValue(state.currentOwner),
-    search: String(elements.searchInput?.value || "").trim(),
-    retailerFilterId: String(elements.rivenditoreFilter?.value || "").trim(),
-    category: String(elements.categoryFilter?.value || "").trim(),
-    advancedFiltersOpen: Boolean(state.advancedFiltersOpen),
     selectedRows: encodeSelectedRowsForUrl(),
     sortKey: normalizeSortKey(state.sortKey),
     sortDirection: normalizeSortDirection(state.sortDirection)
@@ -416,18 +403,6 @@ function syncUrlState() {
   if (sessionState.owner) {
     url.searchParams.set(SESSION_URL_PARAM_KEYS.owner, sessionState.owner);
   }
-  if (sessionState.search) {
-    url.searchParams.set(SESSION_URL_PARAM_KEYS.search, sessionState.search);
-  }
-  if (sessionState.retailerFilterId) {
-    url.searchParams.set(SESSION_URL_PARAM_KEYS.retailerFilter, sessionState.retailerFilterId);
-  }
-  if (sessionState.category) {
-    url.searchParams.set(SESSION_URL_PARAM_KEYS.categoryFilter, sessionState.category);
-  }
-  if (sessionState.advancedFiltersOpen) {
-    url.searchParams.set(SESSION_URL_PARAM_KEYS.advancedFilters, "1");
-  }
   if (sessionState.sortKey !== "prodotto" || sessionState.sortDirection !== "asc") {
     url.searchParams.set(SESSION_URL_PARAM_KEYS.sortKey, sessionState.sortKey);
     url.searchParams.set(SESSION_URL_PARAM_KEYS.sortDirection, sessionState.sortDirection);
@@ -443,17 +418,8 @@ function syncUrlState() {
 function applySessionStateFromUrl(sessionState) {
   state.selectedRivenditoreByProduct = {};
 
-  if (elements.searchInput) {
-    elements.searchInput.value = sessionState.search || "";
-  }
-
-  setSelectValue(elements.rivenditoreFilter, sessionState.retailerFilterId || "");
-  setSelectValue(elements.categoryFilter, sessionState.category || "");
-
-  state.advancedFiltersOpen = Boolean(sessionState.advancedFiltersOpen);
   state.sortKey = normalizeSortKey(sessionState.sortKey);
   state.sortDirection = normalizeSortDirection(sessionState.sortDirection);
-  renderAdvancedFilters();
 
   const rowsById = new Map(state.rows.map((row) => [String(row.id), row]));
   (sessionState.selectedRowIds || []).forEach((rowId) => {
@@ -721,16 +687,6 @@ function openOwnerDropdown() {
   elements.ownerDropdownSearch?.focus();
 }
 
-function renderAdvancedFilters() {
-  if (!elements.advancedFilters || !elements.advancedToggleButton) {
-    return;
-  }
-
-  elements.advancedFilters.classList.toggle("hidden", !state.advancedFiltersOpen);
-  elements.advancedToggleButton.setAttribute("aria-expanded", String(state.advancedFiltersOpen));
-  elements.advancedToggleButton.classList.toggle("advanced-toggle-button-active", state.advancedFiltersOpen);
-}
-
 function renderAlphabetIndex() {
   if (!elements.alphabetIndex) {
     return;
@@ -891,13 +847,11 @@ function clearCurrentOwner() {
   cacheOwner("");
   state.rivenditores = [];
   state.rows = [];
-  state.filteredProducts = [];
+  state.filteredProducts = {};
   state.selectedRivenditoreByProduct = {};
   state.checkedProducts = {};
   state.crossedOutProducts = {};
   setPriceFormMode("create");
-  renderRivenditoreControls();
-  renderCategoryOptions();
   renderOwnerSelect();
   renderAlphabetIndex();
   renderSelectedRowsBox();
@@ -913,7 +867,7 @@ function clearCurrentOwner() {
 function setPriceFormMode(mode, row = null) {
   if (mode === "edit" && row) {
     state.editingRowId = row.id;
-    elements.priceSubmitButton.textContent = "Aggiorna";
+    elements.priceSubmitButton.textContent = "+";
     elements.priceCancelButton.classList.remove("hidden");
     elements.entryRow?.classList.add("entry-row-editing");
 
@@ -930,13 +884,14 @@ function setPriceFormMode(mode, row = null) {
 
   state.editingRowId = null;
   elements.priceForm.reset();
-  elements.priceSubmitButton.textContent = "Salva";
+  elements.priceSubmitButton.textContent = "+";
   elements.priceCancelButton.classList.add("hidden");
   state.rivenditoreSearchTerm = "";
   state.categorySearchTerm = "";
   elements.entryRow?.classList.remove("entry-row-editing");
   setFormRivenditoreSelection("");
   setFormCategorySelection("");
+  state.formSearchTerm = "";
   closeRivenditoreDropdown();
   closeCategoryDropdown();
 }
@@ -1018,20 +973,7 @@ function setFormRivenditoreSelection(rivenditoreId) {
   state.formRivenditoreId = exists ? normalizedId : "";
   elements.rivenditoreHiddenInput.value = state.formRivenditoreId;
   renderRivenditoreList();
-}
-
-function renderRivenditoreControls() {
-  const currentRivenditoreFilter = elements.rivenditoreFilter.value;
-  if (state.formRivenditoreId && !state.rivenditores.some((rivenditore) => String(rivenditore.id) === String(state.formRivenditoreId))) {
-    state.formRivenditoreId = "";
-  }
-  const options = state.rivenditores
-    .map((rivenditore) => `<option value="${rivenditore.id}">${escapeHtml(rivenditore.name)}</option>`)
-    .join("");
-
-  elements.rivenditoreFilter.innerHTML = `<option value="">Tutti</option>${options}`;
-  setSelectValue(elements.rivenditoreFilter, currentRivenditoreFilter);
-  renderRivenditoreList();
+  applyFilters();
 }
 
 function closeCategoryDropdown() {
@@ -1110,23 +1052,7 @@ function setFormCategorySelection(categoryValue) {
   state.formCategoryValue = normalizedValue;
   elements.categoryHiddenInput.value = normalizedValue;
   renderCategoryList();
-}
-
-function renderCategoryOptions() {
-  const currentCategoryFilter = elements.categoryFilter.value;
-  const categories = buildCategoryList();
-  const extraCategories = [currentCategoryFilter, state.formCategoryValue]
-    .filter((value) => value && !categories.includes(value))
-    .sort((a, b) => a.localeCompare(b, "it"));
-  const finalCategories = [...categories, ...extraCategories];
-
-  elements.categoryFilter.innerHTML = [
-    `<option value="">Tutte</option>`,
-    ...finalCategories.map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
-  ].join("");
-
-  setSelectValue(elements.categoryFilter, currentCategoryFilter);
-  renderCategoryList();
+  applyFilters();
 }
 
 function buildProductGroups() {
@@ -1434,9 +1360,9 @@ function updateSelectAllCheckboxState() {
 
 function applyFilters(options = {}) {
   const { syncUrl = true } = options;
-  const search = elements.searchInput.value.trim().toLowerCase();
-  const rivenditoreId = elements.rivenditoreFilter.value;
-  const category = elements.categoryFilter.value;
+  const search = state.formSearchTerm.toLowerCase();
+  const rivenditoreId = state.formRivenditoreId;
+  const category = state.formCategoryValue;
 
   const groupedProducts = buildProductGroups();
   const filteredGroups = groupedProducts.filter((group) => {
@@ -1642,7 +1568,6 @@ async function loadOwnerOptions() {
 async function loadRivenditores() {
   if (!state.currentOwner) {
     state.rivenditores = [];
-    renderRivenditoreControls();
     return;
   }
 
@@ -1654,13 +1579,13 @@ async function loadRivenditores() {
 
   if (error) throw error;
   state.rivenditores = data || [];
-  renderRivenditoreControls();
+  renderRivenditoreList();
+  renderCategoryList();
 }
 
 async function loadRows() {
   if (!state.currentOwner) {
     state.rows = [];
-    renderCategoryOptions();
     applyFilters();
     return;
   }
@@ -1703,8 +1628,9 @@ async function loadRows() {
     setPriceFormMode("create");
   }
 
-  renderCategoryOptions();
   applyFilters();
+  renderCategoryList();
+
 }
 
 async function refreshData() {
@@ -2105,12 +2031,6 @@ function handleOwnerDropdownOptionClick(event) {
   });
 }
 
-function handleAdvancedToggle() {
-  state.advancedFiltersOpen = !state.advancedFiltersOpen;
-  renderAdvancedFilters();
-  syncUrlState();
-}
-
 function handleAlphabetIndexClick(event) {
   const target = event.target;
   if (!(target instanceof Element)) {
@@ -2320,13 +2240,20 @@ function handleSortButtonClick(event) {
   applyFilters();
 }
 
-function handleSearchReset() {
-  if (elements.searchInput) {
-    elements.searchInput.value = "";
-  }
+function handlePriceResetFilters() {
+  // Reset solo del form di inserimento
+  elements.priceForm.reset();
+  state.formRivenditoreId = "";
+  state.formCategoryValue = "";
+  state.formSearchTerm = "";
 
-  setSelectValue(elements.rivenditoreFilter, "");
-  setSelectValue(elements.categoryFilter, "");
+  renderRivenditoreList();
+  renderCategoryList();
+  applyFilters();
+}
+
+function handleFormProductInput() {
+  state.formSearchTerm = elements.priceForm.elements.prodotto.value.trim();
   applyFilters();
 }
 
@@ -2353,43 +2280,54 @@ function handleRowsBodyInput(event) {
 }
 
 function bindEvents() {
+  // Eventi globali
   elements.scrollToTopButton?.addEventListener("click", handleScrollToTop);
   elements.selectedRowsList?.addEventListener("click", handleSelectedRowClick);
   elements.selectAllCheckbox?.addEventListener("pointerdown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("keydown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("change", handleSelectAllChange);
+
+  // Owner dropdown
   elements.ownerDropdownButton.addEventListener("click", handleOwnerDropdownToggle);
   elements.ownerDropdownSearch.addEventListener("input", handleOwnerDropdownSearch);
   elements.ownerDropdownSearch.addEventListener("keydown", handleOwnerDropdownSearchKeydown);
   elements.ownerDropdownOptions.addEventListener("click", handleOwnerDropdownOptionClick);
+
+  // Form inserimento/modifica
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceCancelButton.addEventListener("click", handleCancelEdit);
-  elements.selectedRowsCopyButton?.addEventListener("click", handleSelectedRowsCopy);
-  elements.selectedRowsClearButton?.addEventListener("click", handleSelectedRowsClear);
-  elements.advancedToggleButton.addEventListener("click", handleAdvancedToggle);
-  elements.alphabetIndex?.addEventListener("click", handleAlphabetIndexClick);
-  elements.refreshButton.addEventListener("click", refreshData);
+  elements.priceResetFiltersButton?.addEventListener("click", handlePriceResetFilters);   // se lo vuoi tenere
+  elements.priceForm.elements.prodotto.addEventListener("input", handleFormProductInput);
+
+  // Rivenditore e Categoria dropdown (nel form)
   elements.rivenditoreDropdownButton.addEventListener("click", handleRivenditoreDropdownToggle);
   elements.rivenditoreDropdownSearch.addEventListener("input", handleRivenditoreDropdownSearch);
   elements.rivenditoreDropdownOptions.addEventListener("click", handleRivenditoreDropdownOptionClick);
+
   elements.categoryDropdownButton.addEventListener("click", handleCategoryDropdownToggle);
   elements.categoryDropdownSearch.addEventListener("input", handleCategoryDropdownSearch);
   elements.categoryDropdownOptions.addEventListener("click", handleCategoryDropdownOptionClick);
+
+  // Tabella
   elements.rowsBody.addEventListener("input", handleRowsBodyInput);
   elements.rowsBody.addEventListener("change", handleRowRivenditoreChange);
   elements.rowsBody.addEventListener("click", handleRowActionClick);
+
+  // Selezionati
+  elements.selectedRowsCopyButton?.addEventListener("click", handleSelectedRowsCopy);
+  elements.selectedRowsClearButton?.addEventListener("click", handleSelectedRowsClear);
   elements.selectedRowsToggleSize?.addEventListener("click", handleSelectedRowsToggleSize);
+
+  // Altri eventi generali
+  elements.refreshButton.addEventListener("click", refreshData);
+  elements.alphabetIndex?.addEventListener("click", handleAlphabetIndexClick);
+
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("keydown", handleDocumentKeydown);
+
   window.addEventListener("resize", updateStickyAlphabetMetrics);
   window.addEventListener("scroll", updateScrollToTopButtonVisibility, { passive: true });
   elements.tableWrap?.addEventListener("scroll", updateScrollToTopButtonVisibility, { passive: true });
-
-  elements.searchInput.addEventListener("input", applyFilters);
-  elements.searchResetButton?.addEventListener("click", handleSearchReset);
-  elements.rivenditoreFilter.addEventListener("change", applyFilters);
-  elements.categoryFilter.addEventListener("change", applyFilters);
-  elements.sortButtons.forEach((button) => button.addEventListener("click", handleSortButtonClick));
 }
 
 async function bootstrap() {
@@ -2398,7 +2336,6 @@ async function bootstrap() {
     const sharedSession = readSessionStateFromUrl();
     supabaseClient = createSupabaseClient();
     bindEvents();
-    renderAdvancedFilters();
     updateScrollToTopButtonVisibility();
     await loadOwnerOptions();
 
