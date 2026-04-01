@@ -139,7 +139,7 @@ function updateScrollToTopButtonVisibility() {
 
 function showTableMessage(message) {
   if (elements.rowsBody) {
-    elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">${message}</td></tr>`;
+    elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">${escapeHtml(message)}</td></tr>`;
   }
 }
 
