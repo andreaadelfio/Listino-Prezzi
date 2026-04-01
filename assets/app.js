@@ -844,8 +844,6 @@ function clearCurrentOwner() {
 function setPriceFormMode(mode, row = null) {
   if (mode === "edit" && row) {
     state.editingRowId = row.id;
-    elements.priceSubmitButton.textContent = "+";
-    elements.priceCancelButton.classList.remove("hidden");
     elements.entryRow?.classList.add("entry-row-editing");
 
     elements.priceForm.elements.prodotto.value = row.prodotto || "";
@@ -861,8 +859,6 @@ function setPriceFormMode(mode, row = null) {
 
   state.editingRowId = null;
   elements.priceForm.reset();
-  elements.priceSubmitButton.textContent = "+";
-  elements.priceCancelButton.classList.add("hidden");
   state.rivenditoreSearchTerm = "";
   state.categorySearchTerm = "";
   elements.entryRow?.classList.remove("entry-row-editing");
@@ -1870,6 +1866,15 @@ async function handlePriceSubmit(event) {
 
 function handleCancelEdit() {
   clearFeedback();
+  // Reset del form di inserimento
+  elements.priceForm.reset();
+  state.formRivenditoreId = "";
+  state.formCategoryValue = "";
+  state.formSearchTerm = "";
+
+  renderRivenditoreList();
+  renderCategoryList();
+  applyFilters();
   setPriceFormMode("create");
 }
 
@@ -2272,8 +2277,7 @@ function bindEvents() {
 
   // Form inserimento/modifica
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
-  elements.priceCancelButton.addEventListener("click", handleCancelEdit);
-  elements.priceResetFiltersButton?.addEventListener("click", handlePriceResetFilters);   // se lo vuoi tenere
+  elements.priceResetFiltersButton?.addEventListener("click", handleCancelEdit);
   elements.priceForm.elements.prodotto.addEventListener("input", handleFormProductInput);
 
   // Rivenditore e Categoria dropdown (nel form)
