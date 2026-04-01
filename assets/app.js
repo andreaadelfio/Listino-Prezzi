@@ -186,9 +186,7 @@ function showFeedback(message, type = "success") {
     return;
   }
   stopFeedbackTimer();
-  const timerMarkup = type === "success"
-    ? `<span class="feedback-timer" aria-hidden="true"></span>`
-    : "";
+  const timerMarkup = `<span class="feedback-timer" aria-hidden="true"></span>`;
   elements.feedback.innerHTML = `
     <span class="feedback-content">
       <span class="feedback-message">${escapeHtml(message)}</span>
@@ -197,9 +195,7 @@ function showFeedback(message, type = "success") {
   `;
   elements.feedback.className = `feedback feedback-inline feedback-${type}`;
 
-  if (type === "success") {
-    startFeedbackTimer();
-  }
+  startFeedbackTimer();
 }
 
 function clearFeedback() {
