@@ -34,14 +34,15 @@ const state = {
   sortKey: "prodotto",
   sortDirection: "asc",
   crossedOutProducts: {},
-  formSearchTerm: ""
+  formSearchTerm: "",
+  feedbackHideTimeoutId: null,
+  feedbackAnimationFrameId: null,
+  alphabetHighlightTimeoutId: null,
+  loadingRequestCount: 0,
+  quantityUpdateTimeoutIds: new Map(),
+  cachedCategories: null,
+  supabaseClient: null
 };
-
-let feedbackHideTimeoutId = null;
-let feedbackAnimationFrameId = null;
-let alphabetHighlightTimeoutId = null;
-let loadingRequestCount = 0;
-const quantityUpdateTimeoutIds = new Map();
 
 const elements = {
   loadingOverlay: document.querySelector("#loading-overlay"),
@@ -97,7 +98,7 @@ if (elements.rowsBody) {
 }
 
 function showLoadingOverlay(message = "Caricamento...") {
-  loadingRequestCount += 1;
+  state.loadingRequestCount += 1;
   if (elements.loadingOverlayLabel) {
     elements.loadingOverlayLabel.textContent = message;
   }
@@ -107,8 +108,8 @@ function showLoadingOverlay(message = "Caricamento...") {
 }
 
 function hideLoadingOverlay() {
-  loadingRequestCount = Math.max(loadingRequestCount - 1, 0);
-  if (loadingRequestCount > 0) {
+  state.loadingRequestCount = Math.max(state.loadingRequestCount - 1, 0);
+  if (state.loadingRequestCount > 0) {
     return;
   }
 
@@ -144,13 +145,13 @@ function showTableMessage(message) {
 }
 
 function stopFeedbackTimer() {
-  if (feedbackHideTimeoutId !== null) {
-    window.clearTimeout(feedbackHideTimeoutId);
-    feedbackHideTimeoutId = null;
+  if (state.feedbackHideTimeoutId !== null) {
+    window.clearTimeout(state.feedbackHideTimeoutId);
+    state.feedbackHideTimeoutId = null;
   }
-  if (feedbackAnimationFrameId !== null) {
-    window.cancelAnimationFrame(feedbackAnimationFrameId);
-    feedbackAnimationFrameId = null;
+  if (state.feedbackAnimationFrameId !== null) {
+    window.cancelAnimationFrame(state.feedbackAnimationFrameId);
+    state.feedbackAnimationFrameId = null;
   }
 }
 
@@ -168,7 +169,7 @@ function updateFeedbackTimer(startTime, durationMs) {
   timerElement.style.setProperty("--feedback-progress", `${progress * 100}%`);
 
   if (progress < 1 && !elements.feedback.classList.contains("hidden")) {
-    feedbackAnimationFrameId = window.requestAnimationFrame(() => updateFeedbackTimer(startTime, durationMs));
+    state.feedbackAnimationFrameId = window.requestAnimationFrame(() => updateFeedbackTimer(startTime, durationMs));
   }
 }
 
@@ -176,7 +177,7 @@ function startFeedbackTimer(durationMs = FEEDBACK_DISMISS_MS) {
   stopFeedbackTimer();
   const startTime = performance.now();
   updateFeedbackTimer(startTime, durationMs);
-  feedbackHideTimeoutId = window.setTimeout(() => {
+  state.feedbackHideTimeoutId = window.setTimeout(() => {
     clearFeedback();
   }, durationMs);
 }
@@ -427,8 +428,6 @@ function createSupabaseClient() {
   return window.supabase.createClient(supabaseUrl, supabaseKey);
 }
 
-let supabaseClient;
-
 function setSelectValue(selectElement, value) {
   if (!selectElement) return;
   const desiredValue = String(value ?? "");
@@ -550,7 +549,7 @@ function renderSortButtons() {
 }
 
 async function findRivenditoreByOwnerAndName(owner, name) {
-  const { data, error } = await supabaseClient
+  const { data, error } = await state.supabaseClient
     .from("retailers")
     .select("id, name, owner")
     .eq("owner", owner)
@@ -565,12 +564,20 @@ async function findRivenditoreByOwnerAndName(owner, name) {
 }
 
 function buildCategoryList() {
-  return [...new Set(
+  // Restituisci dalla cache se disponibile
+  if (state.cachedCategories !== null) {
+    return state.cachedCategories;
+  }
+
+  // Altrimenti calcola e cachea
+  state.cachedCategories = [...new Set(
     state.rows
       .map((row) => row.categoria)
       .filter(Boolean)
       .map((value) => String(value).trim())
   )].sort((a, b) => a.localeCompare(b, "it"));
+
+  return state.cachedCategories;
 }
 
 function syncCheckedProducts() {
@@ -709,9 +716,9 @@ function highlightAlphabetTarget(row) {
     return;
   }
 
-  if (alphabetHighlightTimeoutId !== null) {
-    window.clearTimeout(alphabetHighlightTimeoutId);
-    alphabetHighlightTimeoutId = null;
+  if (state.alphabetHighlightTimeoutId !== null) {
+    window.clearTimeout(state.alphabetHighlightTimeoutId);
+    state.alphabetHighlightTimeoutId = null;
   }
 
   elements.rowsBody?.querySelectorAll(".alphabet-jump-target").forEach((element) => {
@@ -719,9 +726,9 @@ function highlightAlphabetTarget(row) {
   });
 
   row.classList.add("alphabet-jump-target");
-  alphabetHighlightTimeoutId = window.setTimeout(() => {
+  state.alphabetHighlightTimeoutId = window.setTimeout(() => {
     row.classList.remove("alphabet-jump-target");
-    alphabetHighlightTimeoutId = null;
+    state.alphabetHighlightTimeoutId = null;
   }, 1800);
 }
 
@@ -808,7 +815,7 @@ async function handleSelectAllChange(event) {
     });
   }
   
-  await supabaseClient
+  await state.supabaseClient
     .from("listino_prezzi_raw")
     .update({ selected: event.target.checked })
     .eq("owner", state.currentOwner);
@@ -1133,12 +1140,12 @@ function updateLocalQuantityForProduct(product, quantity) {
 function scheduleQuantityUpdate(product, quantity) {
   const normalizedQuantity = normalizeQuantity(quantity, 1);
 
-  if (quantityUpdateTimeoutIds.has(product)) {
-    window.clearTimeout(quantityUpdateTimeoutIds.get(product));
+  if (state.quantityUpdateTimeoutIds.has(product)) {
+    window.clearTimeout(state.quantityUpdateTimeoutIds.get(product));
   }
 
   const timeoutId = window.setTimeout(async () => {
-    quantityUpdateTimeoutIds.delete(product);
+    state.quantityUpdateTimeoutIds.delete(product);
 
     if (!state.currentOwner) {
       return;
@@ -1151,12 +1158,12 @@ function scheduleQuantityUpdate(product, quantity) {
     }
   }, QUANTITY_UPDATE_DEBOUNCE_MS);
 
-  quantityUpdateTimeoutIds.set(product, timeoutId);
+  state.quantityUpdateTimeoutIds.set(product, timeoutId);
 }
 
 async function persistQuantityForProduct(product, quantity) {
   const normalizedQuantity = normalizeQuantity(quantity, 1);
-  const { error } = await supabaseClient
+  const { error } = await state.supabaseClient
     .from("listino_prezzi_raw")
     .update({ quantity: normalizedQuantity })
     .eq("owner", state.currentOwner)
@@ -1275,14 +1282,14 @@ async function handleSelectedRowsClear() {
 
   try {
     crossedProducts.forEach((product) => {
-      if (quantityUpdateTimeoutIds.has(product)) {
-        window.clearTimeout(quantityUpdateTimeoutIds.get(product));
-        quantityUpdateTimeoutIds.delete(product);
+      if (state.quantityUpdateTimeoutIds.has(product)) {
+        window.clearTimeout(state.quantityUpdateTimeoutIds.get(product));
+        state.quantityUpdateTimeoutIds.delete(product);
       }
     });
 
     if (state.currentOwner) {
-      const { error } = await supabaseClient
+      const { error } = await state.supabaseClient
         .from("listino_prezzi_raw")
         .update({ selected: false, quantity: normalizeQuantity(1) })
         .eq("owner", state.currentOwner)
@@ -1504,12 +1511,12 @@ function renderRows() {
 
 async function loadOwnerOptions() {
   const [rivenditoresResponse, rowsResponse] = await Promise.all([
-    supabaseClient
+    state.supabaseClient
       .from("retailers")
       .select("owner")
       .not("owner", "is", null)
       .limit(1000),
-    supabaseClient
+    state.supabaseClient
       .from("listino_prezzi_raw")
       .select("owner")
       .not("owner", "is", null)
@@ -1544,7 +1551,7 @@ async function loadRivenditores() {
     return;
   }
 
-  const { data, error } = await supabaseClient
+  const { data, error } = await state.supabaseClient
     .from("retailers")
     .select("id, name, owner")
     .eq("owner", state.currentOwner)
@@ -1557,13 +1564,14 @@ async function loadRivenditores() {
 }
 
 async function loadRows() {
+  state.cachedCategories = null;
   if (!state.currentOwner) {
     state.rows = [];
     applyFilters();
     return;
   }
 
-  const { data, error } = await supabaseClient
+  const { data, error } = await state.supabaseClient
     .from("listino_prezzi_raw")
     .select(`
       id,
@@ -1607,6 +1615,7 @@ async function loadRows() {
 }
 
 async function refreshData() {
+  state.cachedCategories = null;
   if (!state.currentOwner) {
     showTableMessage("Seleziona un owner per caricare il listino.");
     if (elements.tableCounter) {
@@ -1661,7 +1670,7 @@ async function resolveRivenditoreForSubmit() {
       throw new Error("Seleziona un rivenditore dalla lista oppure continua a digitare fino a non trovare risultati.");
     }
 
-    const { data, error } = await supabaseClient
+    const { data, error } = await state.supabaseClient
       .from("retailers")
       .insert([{ name: newRivenditoreName, owner: state.currentOwner }])
       .select("id, name")
@@ -1816,7 +1825,7 @@ async function handlePriceSubmit(event) {
     if (state.editingRowId) {
       const editingRowId = state.editingRowId;
       const previousRow = findRowById(editingRowId);
-      const { error } = await supabaseClient
+      const { error } = await state.supabaseClient
         .from("listino_prezzi_raw")
         .update(payload)
         .eq("id", editingRowId)
@@ -1844,7 +1853,7 @@ async function handlePriceSubmit(event) {
       return;
     }
 
-    const { error } = await supabaseClient
+    const { error } = await state.supabaseClient
       .from("listino_prezzi_raw")
       .insert([payload]);
 
@@ -2066,7 +2075,7 @@ async function handleRowRivenditoreChange(event) {
       delete state.checkedProducts[product];
     }
 
-    await supabaseClient
+    await state.supabaseClient
       .from("listino_prezzi_raw")
       .update({ selected: target.checked })
       .eq("prodotto", product)
@@ -2125,7 +2134,7 @@ async function handleDeleteRow(rowId) {
 
   showLoadingOverlay("Cancellazione riga...");
   try {
-    const { error } = await supabaseClient
+    const { error } = await state.supabaseClient
       .from("listino_prezzi_raw")
       .delete()
       .eq("id", rowId)
@@ -2315,7 +2324,7 @@ async function bootstrap() {
   showLoadingOverlay("Avvio applicazione...");
   try {
     const sharedSession = readSessionStateFromUrl();
-    supabaseClient = createSupabaseClient();
+    state.supabaseClient = createSupabaseClient();
     bindEvents();
     updateScrollToTopButtonVisibility();
     await loadOwnerOptions();
