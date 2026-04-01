@@ -314,25 +314,6 @@ function cacheOwner(owner) {
   }
 }
 
-function getCheckedProductsCacheMap() {
-  try {
-    const rawValue = window.localStorage.getItem(CHECKED_PRODUCTS_CACHE_KEY);
-    if (!rawValue) {
-      return {};
-    }
-
-    const parsedValue = JSON.parse(rawValue);
-    if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
-      return {};
-    }
-
-    return parsedValue;
-  } catch {
-    return {};
-  }
-}
-
-
 async function withUrlSyncPaused(callback) {
   const previousValue = state.urlSyncPaused;
   state.urlSyncPaused = true;
