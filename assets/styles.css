@@ -515,12 +515,6 @@ select {
   opacity: 0.55;
 }
 
-.selection-box-title .icon-button {
-  width: 2.35rem;
-  min-width: 2.35rem;
-  min-height: 2.35rem;
-}
-
 .selection-box-title .icon-button:disabled {
   pointer-events: none;
 }
