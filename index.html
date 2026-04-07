@@ -195,8 +195,12 @@
           <div id="selected-rows-box" class="selection-panel hidden reduced" aria-live="polite">
             <div class="selection-box-head">
               <div class="selection-box-title">
-                <p class="eyebrow">Selezionati</p>
-                <button id="selected-rows-copy-button" class="secondary-button compact-button" type="button">Copia</button>
+              <p id="selected-rows-count" class="eyebrow pill">0 selezionati</p>
+              <button id="selected-rows-copy-button" class="icon-button" type="button" aria-label="Copia" title="Copia">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M19 2H9c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H9V4h10v12zM7 6H5v14c0 1.1.9 2 2 2h10v-2H7V6z"/>
+                </svg>
+              </button>
               </div>
               <div class="selection-box-actions">
                 <button
@@ -211,7 +215,7 @@
                   </svg>
                 </button>
                 <button id="selected-rows-toggle-size" class="icon-button" type="button">↑</button>
-                <span id="selected-rows-count" class="pill">0 selezionati</span>
+
               </div>
             </div>
             <pre id="selected-rows-list" class="selection-plain-list"></pre>
