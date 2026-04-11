@@ -1,4 +1,4 @@
-const APP_VERSION = "20260326-5";
+const APP_VERSION = "20260411-2";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const QUANTITY_UPDATE_DEBOUNCE_MS = 650;
@@ -800,25 +800,45 @@ async function handleSelectAllChange(event) {
     return;
   }
   
+  let nextSelected = Boolean(target.checked);
+
   if (state.selectAllWasIndeterminate) {
     visibleProducts.forEach((product) => {
       delete state.checkedProducts[product];
+      delete state.crossedOutProducts[product];
+      updateLocalSelectionFlagsForProduct(product, { selected: false, isScratched: false });
     });
     target.checked = false;
+    nextSelected = false;
   } else if (target.checked) {
     visibleProducts.forEach((product) => {
       state.checkedProducts[product] = true;
+      delete state.crossedOutProducts[product];
+      updateLocalSelectionFlagsForProduct(product, { selected: true, isScratched: false });
     });
   } else {
     visibleProducts.forEach((product) => {
       delete state.checkedProducts[product];
+      delete state.crossedOutProducts[product];
+      updateLocalSelectionFlagsForProduct(product, { selected: false, isScratched: false });
     });
+    nextSelected = false;
   }
-  
-  await state.supabaseClient
-    .from("listino_prezzi_raw")
-    .update({ selected: event.target.checked })
-    .eq("owner", state.currentOwner);
+
+  try {
+    const { error } = await state.supabaseClient
+      .from("listino_prezzi_raw")
+      .update({ selected: nextSelected, is_scratched: false })
+      .eq("owner", state.currentOwner)
+      .in("prodotto", visibleProducts);
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    showFeedback(`Aggiornamento selezione fallito: ${error.message}`, "error");
+    await loadRows();
+  }
 
   state.selectAllWasIndeterminate = false;
   renderRows();
@@ -831,7 +851,7 @@ function clearCurrentOwner() {
   cacheOwner("");
   state.rivenditores = [];
   state.rows = [];
-  state.filteredProducts = {};
+  state.filteredProducts = [];
   state.selectedRivenditoreByProduct = {};
   state.checkedProducts = {};
   state.crossedOutProducts = {};
@@ -1137,6 +1157,36 @@ function updateLocalQuantityForProduct(product, quantity) {
   });
 }
 
+function updateLocalSelectionFlagsForProduct(product, { selected, isScratched }) {
+  const normalizedSelected = Boolean(selected);
+  const normalizedScratched = normalizedSelected && Boolean(isScratched);
+
+  state.rows = state.rows.map((row) => (
+    row.prodotto === product
+      ? { ...row, selected: normalizedSelected, is_scratched: normalizedScratched }
+      : row
+  ));
+
+  state.filteredProducts = state.filteredProducts.map((group) => {
+    if (group.product !== product) {
+      return group;
+    }
+
+    const updatedRows = group.rows.map((row) => (
+      { ...row, selected: normalizedSelected, is_scratched: normalizedScratched }
+    ));
+    const selectedRow = updatedRows.find(
+      (row) => String(row.retailer_id) === String(group.selectedRivenditoreId)
+    ) || updatedRows[0];
+
+    return {
+      ...group,
+      rows: updatedRows,
+      selectedRow
+    };
+  });
+}
+
 function scheduleQuantityUpdate(product, quantity) {
   const normalizedQuantity = normalizeQuantity(quantity, 1);
 
@@ -1166,6 +1216,24 @@ async function persistQuantityForProduct(product, quantity) {
   const { error } = await state.supabaseClient
     .from("listino_prezzi_raw")
     .update({ quantity: normalizedQuantity })
+    .eq("owner", state.currentOwner)
+    .eq("prodotto", product);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function persistScratchedForProduct(product, isScratched) {
+  const nextScratchedValue = Boolean(state.checkedProducts[product]) && Boolean(isScratched);
+
+  if (!state.currentOwner) {
+    return;
+  }
+
+  const { error } = await state.supabaseClient
+    .from("listino_prezzi_raw")
+    .update({ is_scratched: nextScratchedValue })
     .eq("owner", state.currentOwner)
     .eq("prodotto", product);
 
@@ -1230,7 +1298,7 @@ function renderSelectedRowsBox() {
   elements.selectedRowsBox.classList.remove("hidden");
 }
 
-function handleSelectedRowClick(event) {
+async function handleSelectedRowClick(event) {
   const target = event.target;
   if (!(target instanceof Element)) return;
 
@@ -1240,13 +1308,30 @@ function handleSelectedRowClick(event) {
   const product = item.dataset.crossedProduct;
   if (!product) return;
 
-  if (state.crossedOutProducts[product]) {
-    delete state.crossedOutProducts[product];
-  } else {
+  const previousCrossed = Boolean(state.crossedOutProducts[product]);
+  const nextCrossed = !previousCrossed;
+
+  if (nextCrossed) {
     state.crossedOutProducts[product] = true;
+  } else {
+    delete state.crossedOutProducts[product];
   }
 
+  updateLocalSelectionFlagsForProduct(product, { selected: true, isScratched: nextCrossed });
   renderSelectedRowsBox();
+
+  try {
+    await persistScratchedForProduct(product, nextCrossed);
+  } catch (error) {
+    if (previousCrossed) {
+      state.crossedOutProducts[product] = true;
+    } else {
+      delete state.crossedOutProducts[product];
+    }
+    updateLocalSelectionFlagsForProduct(product, { selected: true, isScratched: previousCrossed });
+    renderSelectedRowsBox();
+    showFeedback(`Aggiornamento barratura fallito: ${error.message}`, "error");
+  }
 }
 
 async function handleSelectedRowsCopy() {
@@ -1291,7 +1376,7 @@ async function handleSelectedRowsClear() {
     if (state.currentOwner) {
       const { error } = await state.supabaseClient
         .from("listino_prezzi_raw")
-        .update({ selected: false, quantity: normalizeQuantity(1) })
+        .update({ selected: false, is_scratched: false, quantity: normalizeQuantity(1) })
         .eq("owner", state.currentOwner)
         .in("prodotto", crossedProducts);
 
@@ -1307,7 +1392,7 @@ async function handleSelectedRowsClear() {
 
     state.rows = state.rows.map((row) => (
       crossedProducts.includes(row.prodotto)
-        ? { ...row, selected: false , quantity: normalizeQuantity(1) }
+        ? { ...row, selected: false, is_scratched: false, quantity: normalizeQuantity(1) }
         : row
     ));
 
@@ -1576,6 +1661,7 @@ async function loadRows() {
     .select(`
       id,
       selected,
+      is_scratched,
       quantity,
       prodotto,
       retailer_id,
@@ -1593,14 +1679,19 @@ async function loadRows() {
   const rivenditoreMap = new Map(state.rivenditores.map((rivenditore) => [String(rivenditore.id), rivenditore.name]));
   state.rows = (data || []).map((row) => ({
     ...row,
+    is_scratched: Boolean(row.is_scratched) && Boolean(row.selected),
     quantity: normalizeQuantity(row.quantity, 1),
     rivenditore_name: rivenditoreMap.get(String(row.retailer_id)) || "-"
   }));
 
   state.checkedProducts = {};
-  state.rows.forEach(row => {
+  state.crossedOutProducts = {};
+  state.rows.forEach((row) => {
     if (row.selected) {
       state.checkedProducts[row.prodotto] = true;
+    }
+    if (row.selected && row.is_scratched) {
+      state.crossedOutProducts[row.prodotto] = true;
     }
   });
 
@@ -2069,20 +2160,55 @@ async function handleRowRivenditoreChange(event) {
       return;
     }
 
+    const previousSelected = Boolean(state.checkedProducts[product]);
+    const previousScratched = Boolean(state.crossedOutProducts[product]);
+
     if (target.checked) {
       state.checkedProducts[product] = true;
     } else {
       delete state.checkedProducts[product];
     }
 
-    await state.supabaseClient
-      .from("listino_prezzi_raw")
-      .update({ selected: target.checked })
-      .eq("prodotto", product)
-      .eq("owner", state.currentOwner);
+    delete state.crossedOutProducts[product];
+    updateLocalSelectionFlagsForProduct(product, { selected: target.checked, isScratched: false });
+
+    try {
+      const { error } = await state.supabaseClient
+        .from("listino_prezzi_raw")
+        .update({ selected: target.checked, is_scratched: false })
+        .eq("prodotto", product)
+        .eq("owner", state.currentOwner);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      if (previousSelected) {
+        state.checkedProducts[product] = true;
+      } else {
+        delete state.checkedProducts[product];
+      }
+
+      if (previousScratched) {
+        state.crossedOutProducts[product] = true;
+      } else {
+        delete state.crossedOutProducts[product];
+      }
+
+      updateLocalSelectionFlagsForProduct(product, {
+        selected: previousSelected,
+        isScratched: previousScratched
+      });
+      renderRows();
+      renderSelectedRowsBox();
+      syncUrlState();
+      showFeedback(`Aggiornamento selezione fallito: ${error.message}`, "error");
+      return;
+    }
 
     updateSelectAllCheckboxState();
     renderSelectedRowsBox();
+    syncUrlState();
     return;
   }
 
@@ -2357,3 +2483,9 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+if ("serviceWorker" in navigator && window.isSecureContext) {
+  navigator.serviceWorker.register("./service-worker.js", { scope: "./" }).catch((error) => {
+    console.warn("Registrazione service worker fallita:", error);
+  });
+}
