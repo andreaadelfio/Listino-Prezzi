@@ -1,4 +1,4 @@
-const APP_VERSION = "20260411-2";
+const APP_VERSION = "20260411-3";
 const TABLE_COLUMN_COUNT = 6;
 const FEEDBACK_DISMISS_MS = 5000;
 const QUANTITY_UPDATE_DEBOUNCE_MS = 650;
@@ -219,7 +219,7 @@ function escapeHtml(value) {
 
 function parsePriceText(priceText) {
   const normalizedValue = String(priceText || "").trim();
-  const match = normalizedValue.match(/(-?\d+(?:[.,]\d+)?)\s*EUR?(?:\s*\/\s*([a-zA-Z]+))?/i)
+  const match = normalizedValue.match(/(-?\d+(?:[.,]\d+)?)\s*€?(?:\s*\/\s*([a-zA-Z]+))?/i)
     || normalizedValue.match(/(-?\d+(?:[.,]\d+)?)\s*€(?:\s*\/\s*([a-zA-Z]+))?/i);
 
   if (!match) {
@@ -937,7 +937,7 @@ function renderRivenditoreList() {
     if (state.rivenditoreSearchTerm) {
       elements.rivenditoreDropdownOptions.innerHTML = `
         <div class="custom-dropdown-empty">
-          Nessun rivenditore trovato. Al salvataggio verra creato "${escapeHtml(state.rivenditoreSearchTerm)}".
+          Nessun rivenditore "${escapeHtml(state.rivenditoreSearchTerm)}", verrà creato al salvataggio.
         </div>
       `;
     } else {
@@ -1017,7 +1017,7 @@ function renderCategoryList() {
     if (state.categorySearchTerm) {
       elements.categoryDropdownOptions.innerHTML = `
         <div class="custom-dropdown-empty">
-          Nessuna categoria trovata. Al salvataggio verra usata "${escapeHtml(state.categorySearchTerm)}".
+          Nessuna categoria "${escapeHtml(state.categorySearchTerm)}", verrà creata al salvataggio.
         </div>
       `;
     } else {
@@ -1883,7 +1883,7 @@ async function handlePriceSubmit(event) {
   try {
     const formData = new FormData(event.currentTarget);
     const prodotto = String(formData.get("prodotto") || "").trim();
-    const prezzo = String(formData.get("prezzo") || "").trim();
+    const prezzo = String(formData.get("prezzo") || "?? €/kg").trim();
     let rivenditoreInfo;
     let categoria;
 
@@ -1897,8 +1897,8 @@ async function handlePriceSubmit(event) {
 
     const rivenditoreId = rivenditoreInfo.rivenditoreId;
 
-    if (!prodotto || !rivenditoreId || !prezzo) {
-      showFeedback("Compila prodotto, rivenditore e prezzo.", "error");
+    if (!prodotto || !rivenditoreId) {
+      showFeedback("Compila prodotto e rivenditore.", "error");
       return;
     }
 
@@ -1988,8 +1988,8 @@ function handleRivenditoreDropdownToggle() {
 }
 
 function handleRivenditoreDropdownSearch(event) {
-  state.rivenditoreSearchTerm = String(event.target.value || "").trim();
-  if (state.rivenditoreSearchTerm) {
+  state.rivenditoreSearchTerm = String(event.target.value || "");
+  if (state.rivenditoreSearchTerm.trim()) {
     state.formRivenditoreId = "";
     elements.rivenditoreHiddenInput.value = "";
   }
@@ -2028,8 +2028,8 @@ function handleCategoryDropdownToggle() {
 }
 
 function handleCategoryDropdownSearch(event) {
-  state.categorySearchTerm = String(event.target.value || "").trim();
-  if (state.categorySearchTerm) {
+  state.categorySearchTerm = String(event.target.value || "");
+  if (state.categorySearchTerm.trim()) {
     state.formCategoryValue = "";
     elements.categoryHiddenInput.value = "";
   }
