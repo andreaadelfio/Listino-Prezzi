@@ -2156,13 +2156,11 @@ async function resolveRivenditoreForSubmit() {
 }
 
 function extractEmojiAndName(input) {
-  // Regex per intercettare emoji (supporto Extended Pictographic per Unicode moderno)
   const emojiRegex = /\p{Extended_Pictographic}/u;
   const match = input.match(emojiRegex);
 
   if (match) {
     const icon = match[0];
-    // Rimuove l'emoji trovata dalla stringa e pulisce gli spazi extra
     const name = input.replace(icon, "").trim();
     return { name, icon };
   }
