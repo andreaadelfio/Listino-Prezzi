@@ -1371,6 +1371,25 @@ function getSelectedProductSummaries() {
 }
 
 function buildSelectedRowsClipboardText(selectedItems = getSelectedProductSummaries()) {
+  if (selectedItems.length > 5) {
+    const grouped = new Map();
+    selectedItems.forEach(item => {
+      const cat = item.row.categoria_display || "Altro";
+      if (!grouped.has(cat)) grouped.set(cat, []);
+      grouped.get(cat).push(item);
+    });
+
+    const sortedCats = [...grouped.keys()].sort((a, b) => a.localeCompare(b, "it"));
+    let text = "";
+    sortedCats.forEach(cat => {
+      text += `${cat}\n`;
+      grouped.get(cat).forEach(({ product, row }) => {
+        text += `  ${getRowQuantityValue(row)}x ${product} | ${row.rivenditore_name || "-"} | ${row.prezzo || "-"}\n`;
+      });
+    });
+    return text.trim();
+  }
+
   return selectedItems
     .map(({ product, row }) => `${getRowQuantityValue(row)}x ${product} | ${row.rivenditore_name || "-"} | ${row.prezzo || "-"}`)
     .join("\n");
@@ -1530,12 +1549,33 @@ function renderSelectedRowsBox() {
 
   elements.selectedRowsCount.textContent = `${selectedItems.length} selezionat${selectedItems.length === 1 ? "o" : "i"}`;
   
-  elements.selectedRowsList.innerHTML = selectedItems.map(({ product, row }) => {
-    const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
-    const text = `${escapeHtml(getRowQuantityValue(row))}x ${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
+  if (selectedItems.length > 5) {
+    const grouped = new Map();
+    selectedItems.forEach(item => {
+      const cat = item.row.categoria_display || "Altro";
+      if (!grouped.has(cat)) grouped.set(cat, []);
+      grouped.get(cat).push(item);
+    });
+
+    const sortedCats = [...grouped.keys()].sort((a, b) => a.localeCompare(b, "it"));
     
-    return `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${text}</div>`;
-  }).join("");
+    let html = "";
+    sortedCats.forEach(cat => {
+      html += `<div class="selection-category-header">${escapeHtml(cat)}</div>`;
+      grouped.get(cat).forEach(({ product, row }) => {
+        const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
+        const itemText = `  ${escapeHtml(getRowQuantityValue(row))}x ${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
+        html += `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${itemText}</div>`;
+      });
+    });
+    elements.selectedRowsList.innerHTML = html;
+  } else {
+    elements.selectedRowsList.innerHTML = selectedItems.map(({ product, row }) => {
+      const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
+      const text = `${escapeHtml(getRowQuantityValue(row))}x ${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
+      return `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${text}</div>`;
+    }).join("");
+  }
 
   const crossedProducts = selectedItems.filter(({ product }) => Boolean(state.crossedOutProducts[product]));
   elements.selectedRowsCopyButton.disabled = false;
@@ -2816,6 +2856,7 @@ function bindEvents() {
   elements.rowsBody.addEventListener("input", handleRowsBodyInput);
   elements.rowsBody.addEventListener("change", handleRowRivenditoreChange);
   elements.rowsBody.addEventListener("click", handleRowActionClick);
+  elements.sortButtons.forEach((button) => button.addEventListener("click", handleSortButtonClick));
 
   // Selezionati
   elements.selectedRowsCopyButton?.addEventListener("click", handleSelectedRowsCopy);

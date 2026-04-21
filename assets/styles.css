@@ -588,6 +588,20 @@ select {
   white-space: pre-wrap;
 }
 
+.selection-category-header {
+  font-weight: 700;
+  color: var(--accent-deep);
+  margin-top: 0.6rem;
+  margin-bottom: 0.15rem;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(166, 75, 42, 0.1);
+}
+.selection-category-header:first-child {
+  margin-top: 0;
+}
+
 .hidden {
   display: none !important;
 }
