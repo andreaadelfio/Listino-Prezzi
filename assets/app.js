@@ -2155,10 +2155,27 @@ async function resolveRivenditoreForSubmit() {
   };
 }
 
+function extractEmojiAndName(input) {
+  // Regex per intercettare emoji (supporto Extended Pictographic per Unicode moderno)
+  const emojiRegex = /\p{Extended_Pictographic}/u;
+  const match = input.match(emojiRegex);
+
+  if (match) {
+    const icon = match[0];
+    // Rimuove l'emoji trovata dalla stringa e pulisce gli spazi extra
+    const name = input.replace(icon, "").trim();
+    return { name, icon };
+  }
+
+  return { name: input.trim(), icon: null };
+}
+
 async function resolveCategoryForSubmit() {
   const searchValue = String(state.categorySearchTerm || "").trim();
   if (searchValue) {
-    const exactCategory = findCategoryByName(searchValue);
+    const { name: cleanName, icon } = extractEmojiAndName(searchValue);
+
+    const exactCategory = findCategoryByName(cleanName);
     if (exactCategory) {
       state.categorySearchTerm = "";
       setFormCategorySelection(exactCategory.name);
@@ -2168,14 +2185,14 @@ async function resolveCategoryForSubmit() {
       };
     }
 
-    const hasPartialCategories = buildCategoryList().some((category) => category.toLowerCase().includes(searchValue.toLowerCase()));
+    const hasPartialCategories = buildCategoryList().some((category) => category.toLowerCase().includes(cleanName.toLowerCase()));
     if (hasPartialCategories) {
       throw new Error("Seleziona una categoria dalla lista oppure continua a digitare fino a non trovare risultati.");
     }
 
     const { data, error } = await state.supabaseClient
       .from("categories")
-      .insert([{ name: searchValue, owner: state.currentOwner }])
+      .insert([{ name: cleanName, icon: icon, owner: state.currentOwner }])
       .select("id, name")
       .single();
 
