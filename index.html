@@ -13,7 +13,7 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="./assets/cart-icon.svg">
     <link rel="apple-touch-icon" href="./assets/cart-icon.svg">
-    <link rel="stylesheet" href="./assets/styles.css?v=20260411-3">
+    <link rel="stylesheet" href="./assets/styles.css?v=20260421-1">
   </head>
   <body>
     <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
@@ -133,7 +133,7 @@
                       aria-haspopup="listbox"
                       aria-expanded="false"
                     >
-                      <span id="rivenditore-dropdown-label">Rivenditore</span>
+                      <span id="rivenditore-dropdown-label">Select</span>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M7 10l5 5 5-5z"/>
                       </svg>
@@ -156,7 +156,7 @@
                       aria-haspopup="listbox"
                       aria-expanded="false"
                     >
-                      <span id="category-dropdown-label">Categoria</span>
+                      <span id="category-dropdown-label">Select</span>
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M7 10l5 5 5-5z"/>
                       </svg>
@@ -233,8 +233,13 @@
       </main>
     </div>
 
+    <div id="row-rivenditore-dropdown-panel" class="custom-dropdown-panel hidden" role="listbox">
+      <div id="row-rivenditore-dropdown-options" class="custom-dropdown-options">
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./assets/config.js?v=20260411-3"></script>
-    <script src="./assets/app.js?v=20260411-3"></script>
+    <script src="./assets/app.js?v=20260421-1"></script>
   </body>
 </html>

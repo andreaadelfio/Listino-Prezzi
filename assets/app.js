@@ -1,6 +1,6 @@
-const APP_VERSION = "20260411-3";
+const APP_VERSION = "20260421-1";
 const TABLE_COLUMN_COUNT = 6;
-const FEEDBACK_DISMISS_MS = 5000;
+const FEEDBACK_DISMISS_MS = 7000;
 const QUANTITY_UPDATE_DEBOUNCE_MS = 650;
 const OWNER_CACHE_KEY = "listino-owner-cache";
 const CHECKED_PRODUCTS_CACHE_KEY = "listino-checked-products-cache";
@@ -18,6 +18,7 @@ const state = {
   ownerDropdownOpen: false,
   ownerSearchTerm: "",
   rivenditores: [],
+  categories: [],
   rows: [],
   filteredProducts: [],
   selectedRivenditoreByProduct: {},
@@ -41,7 +42,8 @@ const state = {
   loadingRequestCount: 0,
   quantityUpdateTimeoutIds: new Map(),
   cachedCategories: null,
-  supabaseClient: null
+  supabaseClient: null,
+  openRowRivenditoreProduct: null
 };
 
 const elements = {
@@ -79,6 +81,8 @@ const elements = {
   categoryDropdownSearch: document.querySelector("#category-dropdown-search"),
   categoryDropdownOptions: document.querySelector("#category-dropdown-options"),
   entryRow: document.querySelector("#entry-row"),
+  rowRivenditoreDropdownPanel: document.querySelector("#row-rivenditore-dropdown-panel"),
+  rowRivenditoreDropdownOptions: document.querySelector("#row-rivenditore-dropdown-options"),
   rowsBody: document.querySelector("#rows-body"),
   tableCounter: document.querySelector("#table-counter"),
   feedback: document.querySelector("#feedback"),
@@ -189,13 +193,45 @@ function showFeedback(message, type = "success") {
   stopFeedbackTimer();
   const timerMarkup = `<span class="feedback-timer" aria-hidden="true"></span>`;
   elements.feedback.innerHTML = `
-    <span class="feedback-content">
+    <span class="feedback-content" style="text-align: center; width: 100%; display: flex; justify-content: center; align-items: center;">
       <span class="feedback-message">${escapeHtml(message)}</span>
       ${timerMarkup}
     </span>
   `;
   elements.feedback.className = `feedback feedback-inline feedback-${type}`;
 
+  startFeedbackTimer();
+}
+
+function showSuccessFeedbackWithProductLink(message, product) {
+  if (!elements.feedback) {
+    return;
+  }
+
+  const normalizedProduct = String(product || "").trim();
+  if (!normalizedProduct) {
+    showFeedback(message, "success");
+    return;
+  }
+
+  stopFeedbackTimer();
+  const timerMarkup = `<span class="feedback-timer" aria-hidden="true"></span>`;
+  elements.feedback.innerHTML = `
+    <span class="feedback-content" style="text-align: center; width: 100%; display: flex; justify-content: center; align-items: center;">
+      <span class="feedback-message">
+        <button
+        type="button"
+        class="feedback-link-button"
+        data-feedback-product="${escapeHtml(normalizedProduct)}"
+        >
+        ${escapeHtml(normalizedProduct)}
+        </button>
+        ${escapeHtml(message)}
+      </span>
+      ${timerMarkup}
+    </span>
+  `;
+  elements.feedback.className = "feedback feedback-inline feedback-success";
   startFeedbackTimer();
 }
 
@@ -208,6 +244,75 @@ function clearFeedback() {
   elements.feedback.className = "feedback feedback-inline hidden";
 }
 
+function setFormSearchValue(value) {
+  const normalizedValue = String(value || "").trim();
+  state.formSearchTerm = normalizedValue;
+  if (elements.priceForm?.elements?.prodotto) {
+    elements.priceForm.elements.prodotto.value = normalizedValue;
+  }
+}
+
+function highlightProductRow(row) {
+  if (!(row instanceof HTMLElement)) {
+    return;
+  }
+
+  elements.rowsBody?.querySelectorAll(".product-jump-target").forEach((element) => {
+    element.classList.remove("product-jump-target");
+  });
+
+  row.classList.add("product-jump-target");
+  window.setTimeout(() => {
+    row.classList.remove("product-jump-target");
+  }, 1800);
+}
+
+function findVisibleProductRow(product) {
+  const normalizedProduct = String(product || "").trim();
+  if (!normalizedProduct || !elements.rowsBody) {
+    return null;
+  }
+
+  return [...elements.rowsBody.querySelectorAll("tr[data-product]")]
+    .find((row) => row.getAttribute("data-product") === normalizedProduct) || null;
+}
+
+function revealProductInTable(product) {
+  const normalizedProduct = String(product || "").trim();
+  if (!normalizedProduct) {
+    return;
+  }
+
+  let targetRow = findVisibleProductRow(normalizedProduct);
+  if (!targetRow) {
+    setFormRivenditoreSelection("");
+    setFormCategorySelection("");
+    setFormSearchValue(normalizedProduct);
+    applyFilters({ syncUrl: false });
+    targetRow = findVisibleProductRow(normalizedProduct);
+  }
+
+  if (!targetRow) {
+    showFeedback(`Prodotto "${normalizedProduct}" non trovato nella tabella.`, "error");
+    return;
+  }
+
+  const scrollContainer = elements.tableWrap;
+  if (scrollContainer) {
+    const headerOffset = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--alphabet-scroll-offset")
+    ) || 0;
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const targetRect = targetRow.getBoundingClientRect();
+    const targetTop = targetRect.top - containerRect.top + scrollContainer.scrollTop - headerOffset;
+    scrollContainer.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
+  } else {
+    targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  highlightProductRow(targetRow);
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -218,18 +323,55 @@ function escapeHtml(value) {
 }
 
 function parsePriceText(priceText) {
-  const normalizedValue = String(priceText || "").trim();
-  const match = normalizedValue.match(/(-?\d+(?:[.,]\d+)?)\s*€?(?:\s*\/\s*([a-zA-Z]+))?/i)
-    || normalizedValue.match(/(-?\d+(?:[.,]\d+)?)\s*€(?:\s*\/\s*([a-zA-Z]+))?/i);
+  let normalizedText = String(priceText || "")
+    .replace(/\u00A0/g, " ")
+    .trim();
 
-  if (!match) {
-    return { value: null, unit: null };
+  const pricePattern =
+    /^(\d+(?:[.,]\d+)?|\?{1,2}|-)\s*€(?:\s*\/\s*(\w+))?$/i;
+
+  const match = normalizedText.match(pricePattern);
+
+  if (!match) return { value: null, unit: null };
+
+  let rawValue = match[1];
+
+  let value;
+
+  if (rawValue === "?" || rawValue === "??" || rawValue === "-") {
+    value = rawValue; // 👈 mantieni il placeholder
+  } else {
+    value = Number(rawValue.replace(",", "."));
   }
 
   return {
-    value: Number(match[1].replace(",", ".")),
+    value,
     unit: match[2] || null
   };
+}
+
+function formatPriceForTable(priceText) {
+  const { value, unit } = parsePriceText(priceText);
+  if (value === null) {
+    return `
+      <div class="price-table-cell">
+        <span class="price-value">${escapeHtml(priceText)}</span>
+      </div>`.trim();
+  }
+
+  const formattedValue = value.toLocaleString("it-IT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+
+  const unitPart = unit ? `€/${unit}` : "€";
+
+  return `
+    <div class="price-table-cell">
+      <span class="price-value">${formattedValue}</span>
+      <span class="price-unit">${escapeHtml(unitPart)}</span>
+    </div>
+  `.trim();
 }
 
 function normalizeQuantity(value, fallback = 1) {
@@ -473,6 +615,23 @@ function findRivenditoreByName(name) {
   return state.rivenditores.find((rivenditore) => normalizeRivenditoreName(rivenditore.name) === normalizedName) || null;
 }
 
+function findCategoryByName(name) {
+  const normalizedName = String(name || "").trim().toLowerCase();
+  return state.categories.find((category) => String(category.name || "").trim().toLowerCase() === normalizedName) || null;
+}
+
+function getDefaultRivenditore() {
+  return state.rivenditores.find((rivenditore) => rivenditore.is_default) || null;
+}
+
+function syncDefaultRivenditoreSelection() {
+  if (state.editingRowId || state.rivenditoreSearchTerm.trim()) {
+    return;
+  }
+
+  return;
+}
+
 function compareTextValues(valueA, valueB) {
   return String(valueA || "").localeCompare(String(valueB || ""), "it", { sensitivity: "base" });
 }
@@ -564,20 +723,34 @@ async function findRivenditoreByOwnerAndName(owner, name) {
 }
 
 function buildCategoryList() {
-  // Restituisci dalla cache se disponibile
   if (state.cachedCategories !== null) {
     return state.cachedCategories;
   }
 
-  // Altrimenti calcola e cachea
   state.cachedCategories = [...new Set(
-    state.rows
-      .map((row) => row.categoria)
+    state.categories
+      .map((category) => category.name)
       .filter(Boolean)
       .map((value) => String(value).trim())
   )].sort((a, b) => a.localeCompare(b, "it"));
 
   return state.cachedCategories;
+}
+
+function getSortedCategoryOptions() {
+  return [...state.categories].sort((categoryA, categoryB) =>
+    String(categoryA?.name || "").localeCompare(String(categoryB?.name || ""), "it")
+  );
+}
+
+function getCategoryDisplayName(category) {
+  const categoryName = String(category?.name || "").trim();
+  const categoryIcon = String(category?.icon || "").trim();
+  if (!categoryName) {
+    return "";
+  }
+
+  return categoryIcon ? `${categoryIcon} ${categoryName}` : categoryName;
 }
 
 function syncCheckedProducts() {
@@ -849,7 +1022,9 @@ function clearCurrentOwner() {
   state.currentOwner = "";
   state.ownerSearchTerm = "";
   cacheOwner("");
+  state.cachedCategories = null;
   state.rivenditores = [];
+  state.categories = [];
   state.rows = [];
   state.filteredProducts = [];
   state.selectedRivenditoreByProduct = {};
@@ -920,12 +1095,12 @@ function updateRivenditoreDropdownLabel() {
         return;
       }
     }
-    elements.rivenditoreDropdownLabel.textContent = "Rivenditore";
+    elements.rivenditoreDropdownLabel.textContent = "Select";
     return;
   }
 
   const rivenditore = state.rivenditores.find((item) => String(item.id) === String(state.formRivenditoreId));
-  elements.rivenditoreDropdownLabel.textContent = rivenditore?.name || "Rivenditore";
+  elements.rivenditoreDropdownLabel.textContent = rivenditore?.name || "Select";
 }
 
 function renderRivenditoreList() {
@@ -1000,18 +1175,23 @@ function updateCategoryDropdownLabel() {
         return;
       }
     }
-    elements.categoryDropdownLabel.textContent = "Categoria";
+    elements.categoryDropdownLabel.textContent = "Select";
     return;
   }
 
-  elements.categoryDropdownLabel.textContent = state.formCategoryValue;
+  const selectedCategory = findCategoryByName(state.formCategoryValue);
+  elements.categoryDropdownLabel.textContent = selectedCategory?.icon
+    ? `${selectedCategory.icon} ${state.formCategoryValue}`
+    : state.formCategoryValue;
 }
 
 function renderCategoryList() {
   const searchTerm = state.categorySearchTerm.toLowerCase();
-  const categories = buildCategoryList();
+  const categories = getSortedCategoryOptions();
   elements.categoryDropdownSearch.value = state.categorySearchTerm;
-  const filteredCategories = categories.filter((category) => category.toLowerCase().includes(searchTerm));
+  const filteredCategories = categories.filter((category) =>
+    String(category?.name || "").toLowerCase().includes(searchTerm)
+  );
 
   if (!filteredCategories.length) {
     if (state.categorySearchTerm) {
@@ -1029,16 +1209,19 @@ function renderCategoryList() {
   }
 
   elements.categoryDropdownOptions.innerHTML = filteredCategories.map((category) => {
-    const isSelected = category === state.formCategoryValue;
+    const categoryName = String(category?.name || "").trim();
+    const categoryIcon = String(category?.icon || "").trim();
+    const isSelected = categoryName === state.formCategoryValue;
     return `
       <button
         type="button"
         class="custom-dropdown-option ${isSelected ? "custom-dropdown-option-active" : ""}"
-        data-category-value="${escapeHtml(category)}"
+        data-category-value="${escapeHtml(categoryName)}"
         role="option"
         aria-selected="${isSelected ? "true" : "false"}"
       >
-        ${escapeHtml(category)}
+        ${categoryIcon ? `<span class="category-option-icon" aria-hidden="true">${escapeHtml(categoryIcon)}</span>` : ""}
+        <span>${escapeHtml(categoryName)}</span>
       </button>
     `;
   }).join("");
@@ -1053,6 +1236,69 @@ function setFormCategorySelection(categoryValue) {
   elements.categoryHiddenInput.value = normalizedValue;
   renderCategoryList();
   applyFilters();
+}
+
+function closeRowRivenditoreDropdown() {
+  state.openRowRivenditoreProduct = null;
+  elements.rowRivenditoreDropdownPanel?.classList.add("hidden");
+}
+
+function openRowRivenditoreDropdown(product, anchorElement) {
+  closeOwnerDropdown();
+  closeRivenditoreDropdown();
+  closeCategoryDropdown();
+
+  state.openRowRivenditoreProduct = product;
+  
+  const rect = anchorElement.getBoundingClientRect();
+  const panel = elements.rowRivenditoreDropdownPanel;
+  
+  if (panel) {
+    panel.style.position = "fixed";
+    panel.style.top = `${rect.bottom + window.scrollY + 5}px`;
+    panel.style.left = `${rect.left + window.scrollX}px`;
+    panel.classList.remove("hidden");
+  }
+
+  renderRowRivenditoreOptions(product);
+}
+
+function renderRowRivenditoreOptions(product) {
+  const group = findGroupByProduct(product);
+  if (!group || !elements.rowRivenditoreDropdownOptions) return;
+
+  elements.rowRivenditoreDropdownOptions.innerHTML = group.rows.map((opt) => {
+    const isSelected = String(opt.retailer_id) === group.selectedRivenditoreId;
+    return `
+      <button
+        type="button"
+        class="custom-dropdown-option ${isSelected ? "custom-dropdown-option-active" : ""}"
+        data-action="select-row-retailer"
+        data-product="${escapeHtml(product)}"
+        data-retailer-id="${opt.retailer_id}"
+      >
+        ${escapeHtml(opt.rivenditore_name)}
+      </button>
+    `;
+  }).join("");
+}
+
+function handleSelectRowRetailer(product, retailerId) {
+  state.selectedRivenditoreByProduct[product] = String(retailerId);
+  closeRowRivenditoreDropdown();
+  applyFilters();
+}
+
+function handleRowRivenditoreDropdownOptionClick(event) {
+  const target = event.target;
+  const button = target.closest('button[data-action="select-row-retailer"]');
+  if (!button) return;
+
+  const product = button.dataset.product;
+  const retailerId = button.dataset.retailerId;
+  if (product && retailerId) {
+    handleSelectRowRetailer(product, retailerId);
+  }
 }
 
 function buildProductGroups() {
@@ -1398,9 +1644,9 @@ async function handleSelectedRowsClear() {
 
     applyFilters({ syncUrl: false });
     syncUrlState();
-    showFeedback("Selezionati barrati rimossi e quantita riportata a 1.");
+    showFeedback("Lista della spesa ripulita.");
   } catch (error) {
-    showFeedback(`Rimozione selezionati barrati fallita: ${error.message}`, "error");
+    showFeedback(`Pulizia della lista della spesa fallita: ${error.message}`, "error");
   }
 }
 
@@ -1436,7 +1682,7 @@ function applyFilters(options = {}) {
         row.prodotto,
         String(getRowQuantityValue(row)),
         row.prezzo,
-        row.categoria,
+        row.categoria_display,
         row.rivenditore_name,
         `${row.prodotto}-${row.rivenditore_name || ""}`
       ])
@@ -1476,11 +1722,6 @@ function renderRows() {
     const isChecked = Boolean(state.checkedProducts[group.product]);
     const alphaLetter = getProductAlphabetLetter(group.product);
     const quantity = getRowQuantityValue(row);
-    const rivenditoreOptions = group.rows.map((optionRow) => `
-      <option value="${optionRow.retailer_id}" ${String(optionRow.retailer_id) === group.selectedRivenditoreId ? "selected" : ""}>
-        ${escapeHtml(optionRow.rivenditore_name)}
-      </option>
-    `).join("");
 
     const dividerMarkup = showAlphabetDividers && alphaLetter !== previousLetter
       ? `
@@ -1494,7 +1735,7 @@ function renderRows() {
 
     return `
       ${dividerMarkup}
-      <tr data-alpha-letter="${alphaLetter}">
+      <tr data-alpha-letter="${alphaLetter}" data-product="${escapeHtml(group.product)}">
         <td class="selection-cell" data-label="Seleziona">
           <input
             type="checkbox"
@@ -1548,12 +1789,42 @@ function renderRows() {
           </div>
         </td>
         <td data-label="Rivenditore">
-          <select class="row-rivenditore-select" data-product="${escapeHtml(group.product)}">
-            ${rivenditoreOptions}
-          </select>
+          <div class="row-rivenditore-cell">
+            <a
+              href="#"
+              class="rivenditore-link"
+              data-action="filter-rivenditore"
+              data-retailer-id="${row.retailer_id}"
+              title="Filtra per questo rivenditore"
+            >
+              ${escapeHtml(row.rivenditore_name)}
+            </a>
+            <button
+              type="button"
+              class="icon-button compact-button"
+              data-action="toggle-row-rivenditore-dropdown"
+              data-product="${escapeHtml(group.product)}"
+              aria-label="Cambia rivenditore"
+              title="Scegli un altro rivenditore"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+          </div>
         </td>
-        <td data-label="Categoria">${escapeHtml(row.categoria || "-")}</td>
-        <td data-label="Prezzo">${escapeHtml(row.prezzo)}</td>
+        <td data-label="Categoria">
+          ${row.categoria ? `
+            <a
+              href="#"
+              class="category-link"
+              data-action="filter-category"
+              data-category="${escapeHtml(row.categoria)}"
+              title="Filtra per ${escapeHtml(row.categoria_display)}"
+            >
+              ${escapeHtml(row.categoria_display)}
+            </a>
+          ` : "-"}
+        </td>
+        <td data-label="Prezzo">${formatPriceForTable(row.prezzo)}</td>
         <td data-label="Azioni">
           <div class="row-actions">
             <button
@@ -1638,13 +1909,33 @@ async function loadRivenditores() {
 
   const { data, error } = await state.supabaseClient
     .from("retailers")
-    .select("id, name, owner")
+    .select("id, name, owner, is_default")
     .eq("owner", state.currentOwner)
+    .order("is_default", { ascending: false })
     .order("name", { ascending: true });
 
   if (error) throw error;
   state.rivenditores = data || [];
+  syncDefaultRivenditoreSelection();
   renderRivenditoreList();
+  renderCategoryList();
+}
+
+async function loadCategories() {
+  state.cachedCategories = null;
+  if (!state.currentOwner) {
+    state.categories = [];
+    return;
+  }
+
+  const { data, error } = await state.supabaseClient
+    .from("categories")
+    .select("id, name, icon, owner")
+    .eq("owner", state.currentOwner)
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  state.categories = data || [];
   renderCategoryList();
 }
 
@@ -1665,7 +1956,7 @@ async function loadRows() {
       quantity,
       prodotto,
       retailer_id,
-      categoria,
+      category_id,
       prezzo,
       created_at,
       owner
@@ -1677,11 +1968,16 @@ async function loadRows() {
   if (error) throw error;
 
   const rivenditoreMap = new Map(state.rivenditores.map((rivenditore) => [String(rivenditore.id), rivenditore.name]));
+  const categoryDisplayMap = new Map(state.categories.map((category) => [String(category.id), getCategoryDisplayName(category)]));
+  const categoryRawMap = new Map(state.categories.map((category) => [String(category.id), category.name]));
+
   state.rows = (data || []).map((row) => ({
     ...row,
     is_scratched: Boolean(row.is_scratched) && Boolean(row.selected),
     quantity: normalizeQuantity(row.quantity, 1),
-    rivenditore_name: rivenditoreMap.get(String(row.retailer_id)) || "-"
+    rivenditore_name: rivenditoreMap.get(String(row.retailer_id)) || "-",
+    categoria: categoryRawMap.get(String(row.category_id)) || null,
+    categoria_display: categoryDisplayMap.get(String(row.category_id)) || null
   }));
 
   state.checkedProducts = {};
@@ -1719,6 +2015,7 @@ async function refreshData() {
   showLoadingOverlay("Caricamento dati...");
   try {
     await loadRivenditores();
+    await loadCategories();
     await loadRows();
   } catch (error) {
     showTableMessage(`Errore nel caricamento dati: ${error.message}`);
@@ -1801,9 +2098,11 @@ async function resolveRivenditoreForSubmit() {
 
   const selectedRivenditoreId = Number(state.formRivenditoreId || elements.rivenditoreHiddenInput.value);
   if (!selectedRivenditoreId) {
+    // Fallback automatico al rivenditore di default se l'utente non ha inserito nulla
+    const defaultRiv = getDefaultRivenditore();
     return {
-      rivenditoreId: null,
-      rivenditoreName: null,
+      rivenditoreId: defaultRiv ? Number(defaultRiv.id) : null,
+      rivenditoreName: defaultRiv?.name || null,
       created: false
     };
   }
@@ -1816,26 +2115,68 @@ async function resolveRivenditoreForSubmit() {
   };
 }
 
-function resolveCategoryForSubmit() {
+async function resolveCategoryForSubmit() {
   const searchValue = String(state.categorySearchTerm || "").trim();
   if (searchValue) {
-    const categories = buildCategoryList();
-    const exactCategory = categories.find((category) => category.toLowerCase() === searchValue.toLowerCase());
+    const exactCategory = findCategoryByName(searchValue);
     if (exactCategory) {
       state.categorySearchTerm = "";
-      setFormCategorySelection(exactCategory);
-      return exactCategory;
+      setFormCategorySelection(exactCategory.name);
+      return {
+        categoryId: Number(exactCategory.id),
+        categoryName: exactCategory.name
+      };
     }
 
-    const hasPartialCategories = categories.some((category) => category.toLowerCase().includes(searchValue.toLowerCase()));
+    const hasPartialCategories = buildCategoryList().some((category) => category.toLowerCase().includes(searchValue.toLowerCase()));
     if (hasPartialCategories) {
       throw new Error("Seleziona una categoria dalla lista oppure continua a digitare fino a non trovare risultati.");
     }
 
-    return searchValue || null;
+    const { data, error } = await state.supabaseClient
+      .from("categories")
+      .insert([{ name: searchValue, owner: state.currentOwner }])
+      .select("id, name")
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        const existingCategory = findCategoryByName(searchValue);
+        if (existingCategory) {
+          state.categorySearchTerm = "";
+          setFormCategorySelection(existingCategory.name);
+          return {
+            categoryId: Number(existingCategory.id),
+            categoryName: existingCategory.name
+          };
+        }
+      }
+
+      throw new Error(`Creazione categoria fallita: ${error.message}`);
+    }
+
+    await loadCategories();
+    state.categorySearchTerm = "";
+    setFormCategorySelection(data.name);
+    return {
+      categoryId: Number(data.id),
+      categoryName: data.name
+    };
   }
 
-  return String(state.formCategoryValue || elements.categoryHiddenInput.value || "").trim() || null;
+  const selectedCategoryName = String(state.formCategoryValue || elements.categoryHiddenInput.value || "").trim();
+  if (!selectedCategoryName) {
+    return {
+      categoryId: null,
+      categoryName: null
+    };
+  }
+
+  const selectedCategory = findCategoryByName(selectedCategoryName);
+  return {
+    categoryId: selectedCategory ? Number(selectedCategory.id) : null,
+    categoryName: selectedCategoryName
+  };
 }
 
 async function applyOwnerSelection(owner, options = {}) {
@@ -1883,13 +2224,12 @@ async function handlePriceSubmit(event) {
   try {
     const formData = new FormData(event.currentTarget);
     const prodotto = String(formData.get("prodotto") || "").trim();
-    const prezzo = String(formData.get("prezzo") || "?? €/kg").trim();
+    const prezzo = String(formData.get("prezzo") || "??€/kg").trim();
     let rivenditoreInfo;
-    let categoria;
-
+    let categoriaInfo;
     try {
       rivenditoreInfo = await resolveRivenditoreForSubmit();
-      categoria = resolveCategoryForSubmit();
+      categoriaInfo = await resolveCategoryForSubmit();
     } catch (error) {
       showFeedback(error.message, "error");
       return;
@@ -1903,16 +2243,17 @@ async function handlePriceSubmit(event) {
     }
 
     const parsedPrice = parsePriceText(prezzo);
+
     const payload = {
       owner: state.currentOwner,
       prodotto,
       retailer_id: rivenditoreId,
-      categoria,
+      category_id: categoriaInfo.categoryId,
       prezzo,
-      prezzo_valore: parsedPrice.value,
+      prezzo_valore: typeof parsedPrice.value === "number" ? parsedPrice.value : null,
       prezzo_unita: parsedPrice.unit
     };
-
+    
     if (state.editingRowId) {
       const editingRowId = state.editingRowId;
       const previousRow = findRowById(editingRowId);
@@ -1938,9 +2279,12 @@ async function handlePriceSubmit(event) {
       state.selectedRivenditoreByProduct[prodotto] = String(rivenditoreId);
       setPriceFormMode("create");
       await refreshData();
-      showFeedback(rivenditoreInfo.created
-        ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino aggiornata.`
-        : "Riga listino aggiornata con successo.");
+      showSuccessFeedbackWithProductLink(
+        rivenditoreInfo.created
+          ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino aggiornata per `
+          : " aggiornato con successo.",
+        prodotto
+      );
       return;
     }
 
@@ -1956,9 +2300,12 @@ async function handlePriceSubmit(event) {
     state.selectedRivenditoreByProduct[prodotto] = String(rivenditoreId);
     setPriceFormMode("create");
     await loadRows();
-    showFeedback(rivenditoreInfo.created
-      ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino salvata.`
-      : "Riga listino salvata con successo.");
+    showSuccessFeedbackWithProductLink(
+      rivenditoreInfo.created
+        ? `Rivenditore "${rivenditoreInfo.rivenditoreName}" creato e riga listino salvata per `
+        : " inserito con successo.",
+      prodotto
+    );
   } finally {
     hideLoadingOverlay();
   }
@@ -2142,6 +2489,9 @@ function handleDocumentClick(event) {
   if (elements.ownerDropdown && !elements.ownerDropdown.contains(target)) {
     closeOwnerDropdown();
   }
+  if (elements.rowRivenditoreDropdownPanel && !elements.rowRivenditoreDropdownPanel.contains(target) && !target.closest('[data-action="toggle-row-rivenditore-dropdown"]')) {
+    closeRowRivenditoreDropdown();
+  }
 }
 
 function handleDocumentKeydown(event) {
@@ -2226,17 +2576,6 @@ async function handleRowRivenditoreChange(event) {
     return;
   }
 
-  if (!(target instanceof HTMLSelectElement) || !target.classList.contains("row-rivenditore-select")) {
-    return;
-  }
-
-  const product = target.dataset.product;
-  if (!product) {
-    return;
-  }
-
-  state.selectedRivenditoreByProduct[product] = target.value;
-  applyFilters();
 }
 
 async function handleDeleteRow(rowId) {
@@ -2277,7 +2616,7 @@ async function handleDeleteRow(rowId) {
     }
 
     await refreshData();
-    showFeedback(`Riga "${row.prodotto}" per "${row.rivenditore_name}" cancellata.`);
+    showFeedback(`"${row.prodotto}" cancellato per "${row.rivenditore_name}".`);
   } finally {
     hideLoadingOverlay();
   }
@@ -2289,14 +2628,14 @@ async function handleRowActionClick(event) {
     return;
   }
 
-  const button = target.closest("button[data-action]");
-  if (!(button instanceof HTMLButtonElement)) {
+  const trigger = target.closest("[data-action]");
+  if (!trigger) {
     return;
   }
 
-  if (button.dataset.action === "quantity-step") {
-    const product = String(button.dataset.product || "").trim();
-    const step = Number.parseInt(String(button.dataset.step || "0"), 10);
+  if (trigger.dataset.action === "quantity-step") {
+    const product = String(trigger.dataset.product || "").trim();
+    const step = Number.parseInt(String(trigger.dataset.step || "0"), 10);
     if (!product || !Number.isFinite(step) || step === 0) {
       return;
     }
@@ -2318,12 +2657,41 @@ async function handleRowActionClick(event) {
     return;
   }
 
-  const rowId = button.dataset.rowId;
+    if (trigger.dataset.action === "filter-rivenditore") {
+      event.preventDefault();
+      setFormRivenditoreSelection(trigger.dataset.retailerId || "");
+      handleScrollToTop();
+      return;
+    }
+
+    if (trigger.dataset.action === "toggle-row-rivenditore-dropdown") {
+      const product = trigger.dataset.product;
+      if (state.openRowRivenditoreProduct === product) {
+        closeRowRivenditoreDropdown();
+      } else {
+        openRowRivenditoreDropdown(product, trigger);
+      }
+      return;
+    }
+
+    if (trigger.dataset.action === "select-row-retailer") {
+      handleSelectRowRetailer(trigger.dataset.product, trigger.dataset.retailerId);
+      return;
+    }
+
+    if (trigger.dataset.action === "filter-category") {
+      event.preventDefault();
+      setFormCategorySelection(trigger.dataset.category || "");
+      handleScrollToTop();
+      return;
+    }
+
+  const rowId = trigger.dataset.rowId;
   if (!rowId) {
     return;
   }
 
-  if (button.dataset.action === "edit-row") {
+  if (trigger.dataset.action === "edit-row") {
     const row = findRowById(rowId);
     if (!row) {
       showFeedback("Riga non trovata per la modifica.", "error");
@@ -2331,11 +2699,10 @@ async function handleRowActionClick(event) {
     }
 
     setPriceFormMode("edit", row);
-    (elements.entryRow || elements.priceSubmitButton)?.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
 
-  if (button.dataset.action === "delete-row") {
+  if (trigger.dataset.action === "delete-row") {
     await handleDeleteRow(rowId);
   }
 }
@@ -2372,6 +2739,25 @@ function handlePriceResetFilters() {
 function handleFormProductInput() {
   state.formSearchTerm = elements.priceForm.elements.prodotto.value.trim();
   applyFilters();
+}
+
+function handleFeedbackClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const button = target.closest("button[data-feedback-product]");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const product = String(button.dataset.feedbackProduct || "").trim();
+  if (!product) {
+    return;
+  }
+
+  revealProductInTable(product);
 }
 
 function handleRowsBodyInput(event) {
@@ -2414,6 +2800,7 @@ function bindEvents() {
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceResetFiltersButton?.addEventListener("click", handleCancelEdit);
   elements.priceForm.elements.prodotto.addEventListener("input", handleFormProductInput);
+  elements.feedback?.addEventListener("click", handleFeedbackClick);
 
   // Rivenditore e Categoria dropdown (nel form)
   elements.rivenditoreDropdownButton.addEventListener("click", handleRivenditoreDropdownToggle);
@@ -2423,6 +2810,7 @@ function bindEvents() {
   elements.categoryDropdownButton.addEventListener("click", handleCategoryDropdownToggle);
   elements.categoryDropdownSearch.addEventListener("input", handleCategoryDropdownSearch);
   elements.categoryDropdownOptions.addEventListener("click", handleCategoryDropdownOptionClick);
+  elements.rowRivenditoreDropdownOptions?.addEventListener("click", handleRowRivenditoreDropdownOptionClick);
 
   // Tabella
   elements.rowsBody.addEventListener("input", handleRowsBodyInput);
