@@ -1,101 +1,30 @@
-const APP_VERSION = "20260421-1";
-const TABLE_COLUMN_COUNT = 6;
-const FEEDBACK_DISMISS_MS = 7000;
-const QUANTITY_UPDATE_DEBOUNCE_MS = 650;
-const OWNER_CACHE_KEY = "listino-owner-cache";
-const CHECKED_PRODUCTS_CACHE_KEY = "listino-checked-products-cache";
-const SORTABLE_COLUMN_KEYS = Object.freeze(["prodotto", "rivenditore", "categoria", "prezzo"]);
-const SESSION_URL_PARAM_KEYS = Object.freeze({
-  owner: "o",
-  sortKey: "sk",
-  sortDirection: "sd"
-});
-const ALPHABET_INDEX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+import {
+  ALPHABET_INDEX_LETTERS,
+  FEEDBACK_DISMISS_MS,
+  FILTER_INPUT_DEBOUNCE_MS,
+  OWNER_CACHE_KEY,
+  QUANTITY_UPDATE_DEBOUNCE_MS,
+  SESSION_URL_PARAM_KEYS,
+  TABLE_COLUMN_COUNT
+} from "./app/constants.js";
+import { createProductGroupsSelector } from "./app/groups.js";
+import { elements, state } from "./app/store.js";
+import {
+  compareTextValues,
+  escapeHtml,
+  formatPriceForTable,
+  getProductAlphabetLetter,
+  getRowQuantityValue,
+  getSortablePriceValue,
+  normalizeOwnerKey,
+  normalizeOwnerValue,
+  normalizeQuantity,
+  parsePriceText,
+  normalizeSortDirection,
+  normalizeSortKey
+} from "./app/utils.js";
 
-const state = {
-  ownerOptions: [],
-  currentOwner: "",
-  ownerDropdownOpen: false,
-  ownerSearchTerm: "",
-  rivenditores: [],
-  categories: [],
-  rows: [],
-  filteredProducts: [],
-  selectedRivenditoreByProduct: {},
-  checkedProducts: {},
-  editingRowId: null,
-  formRivenditoreId: "",
-  rivenditoreDropdownOpen: false,
-  rivenditoreSearchTerm: "",
-  formCategoryValue: "",
-  categoryDropdownOpen: false,
-  categorySearchTerm: "",
-  urlSyncPaused: false,
-  selectAllWasIndeterminate: false,
-  sortKey: "prodotto",
-  sortDirection: "asc",
-  crossedOutProducts: {},
-  formSearchTerm: "",
-  feedbackHideTimeoutId: null,
-  feedbackAnimationFrameId: null,
-  alphabetHighlightTimeoutId: null,
-  loadingRequestCount: 0,
-  quantityUpdateTimeoutIds: new Map(),
-  cachedCategories: null,
-  supabaseClient: null,
-  openRowRivenditoreProduct: null
-};
-
-const elements = {
-  loadingOverlay: document.querySelector("#loading-overlay"),
-  loadingOverlayLabel: document.querySelector("#loading-overlay-label"),
-  scrollToTopButton: document.querySelector("#scroll-to-top-button"),
-  ownerDropdown: document.querySelector("#owner-dropdown"),
-  ownerDropdownButton: document.querySelector("#owner-dropdown-button"),
-  ownerDropdownLabel: document.querySelector("#owner-dropdown-label"),
-  ownerDropdownPanel: document.querySelector("#owner-dropdown-panel"),
-  ownerDropdownSearch: document.querySelector("#owner-dropdown-search"),
-  ownerDropdownOptions: document.querySelector("#owner-dropdown-options"),
-  ownerStatus: document.querySelector("#owner-status"),
-  refreshButton: document.querySelector("#refresh-button"),
-  priceForm: document.querySelector("#price-form"),
-  priceSubmitButton: document.querySelector("#price-submit-button"),
-  priceResetFiltersButton: document.querySelector("#price-reset-filters-button"),
-  priceCancelButton: document.querySelector("#price-cancel-button"),
-  alphabetIndexWrap: document.querySelector(".alphabet-index-wrap"),
-  alphabetIndex: document.querySelector("#alphabet-index"),
-  tableWrap: document.querySelector(".table-wrap"),
-  tableHead: document.querySelector("thead"),
-  rivenditoreHiddenInput: document.querySelector("#rivenditore-hidden-input"),
-  rivenditoreDropdown: document.querySelector("#rivenditore-dropdown"),
-  rivenditoreDropdownButton: document.querySelector("#rivenditore-dropdown-button"),
-  rivenditoreDropdownLabel: document.querySelector("#rivenditore-dropdown-label"),
-  rivenditoreDropdownPanel: document.querySelector("#rivenditore-dropdown-panel"),
-  rivenditoreDropdownSearch: document.querySelector("#rivenditore-dropdown-search"),
-  rivenditoreDropdownOptions: document.querySelector("#rivenditore-dropdown-options"),
-  categoryHiddenInput: document.querySelector("#category-hidden-input"),
-  categoryDropdown: document.querySelector("#category-dropdown"),
-  categoryDropdownButton: document.querySelector("#category-dropdown-button"),
-  categoryDropdownLabel: document.querySelector("#category-dropdown-label"),
-  categoryDropdownPanel: document.querySelector("#category-dropdown-panel"),
-  categoryDropdownSearch: document.querySelector("#category-dropdown-search"),
-  categoryDropdownOptions: document.querySelector("#category-dropdown-options"),
-  entryRow: document.querySelector("#entry-row"),
-  rowRivenditoreDropdownPanel: document.querySelector("#row-rivenditore-dropdown-panel"),
-  rowRivenditoreDropdownOptions: document.querySelector("#row-rivenditore-dropdown-options"),
-  rowsBody: document.querySelector("#rows-body"),
-  tableCounter: document.querySelector("#table-counter"),
-  feedback: document.querySelector("#feedback"),
-  selectedRowsBox: document.querySelector("#selected-rows-box"),
-  selectedRowsCount: document.querySelector("#selected-rows-count"),
-  selectedRowsList: document.querySelector("#selected-rows-list"),
-  selectedRowsCopyButton: document.querySelector("#selected-rows-copy-button"),
-  selectedRowsClearButton: document.querySelector("#selected-rows-clear-button"),
-  selectAllCheckbox: document.querySelector("#select-all-checkbox"),
-  selectedRowsToggleSize: document.querySelector("#selected-rows-toggle-size"),
-  sortButtons: [...document.querySelectorAll(".sort-button")],
-  sortHeaders: [...document.querySelectorAll("th[data-sort-column]")]
-};
+const selectProductGroups = createProductGroupsSelector();
 
 if (elements.rowsBody) {
   elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Inizializzazione frontend...</td></tr>`;
@@ -124,11 +53,13 @@ function hideLoadingOverlay() {
 
 function showFatal(message) {
   if (elements.rowsBody) {
-    elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">${message}</td></tr>`;
+    const markup = `<tr><td colspan="${TABLE_COLUMN_COUNT}">${message}</td></tr>`;
+    if (state.renderCache.rowsMarkup !== markup) {
+      elements.rowsBody.innerHTML = markup;
+      state.renderCache.rowsMarkup = markup;
+    }
   }
-  if (elements.tableCounter) {
-    elements.tableCounter.textContent = "errore";
-  }
+  setTableCounterText("errore");
   showFeedback(message, "error");
 }
 
@@ -144,7 +75,19 @@ function updateScrollToTopButtonVisibility() {
 
 function showTableMessage(message) {
   if (elements.rowsBody) {
-    elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">${escapeHtml(message)}</td></tr>`;
+    const markup = `<tr><td colspan="${TABLE_COLUMN_COUNT}">${escapeHtml(message)}</td></tr>`;
+    if (state.renderCache.rowsMarkup !== markup) {
+      elements.rowsBody.innerHTML = markup;
+      state.renderCache.rowsMarkup = markup;
+    }
+  }
+}
+
+function setTableCounterText(value) {
+  const normalizedValue = String(value || "");
+  if (elements.tableCounter && state.renderCache.tableCounter !== normalizedValue) {
+    elements.tableCounter.textContent = normalizedValue;
+    state.renderCache.tableCounter = normalizedValue;
   }
 }
 
@@ -311,130 +254,6 @@ function revealProductInTable(product) {
   }
 
   highlightProductRow(targetRow);
-}
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function parsePriceText(priceText) {
-  let normalizedText = String(priceText || "")
-    .replace(/\u00A0/g, " ")
-    .trim();
-
-  const pricePattern =
-    /^(\d+(?:[.,]\d+)?|\?{1,2}|-)\s*€(?:\s*\/\s*(\w+))?$/i;
-
-  const match = normalizedText.match(pricePattern);
-
-  if (!match) return { value: null, unit: null };
-
-  let rawValue = match[1];
-
-  let value;
-
-  if (rawValue === "?" || rawValue === "??" || rawValue === "-") {
-    value = rawValue; // 👈 mantieni il placeholder
-  } else {
-    value = Number(rawValue.replace(",", "."));
-  }
-
-  return {
-    value,
-    unit: match[2] || null
-  };
-}
-
-function formatPriceForTable(priceText) {
-  const { value, unit } = parsePriceText(priceText);
-  if (value === null) {
-    return `
-      <div class="price-table-cell">
-        <span class="price-value">${escapeHtml(priceText)}</span>
-      </div>`.trim();
-  }
-
-  const formattedValue = value.toLocaleString("it-IT", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
-
-  const unitPart = unit ? `€/${unit}` : "€";
-
-  return `
-    <div class="price-table-cell">
-      <span class="price-value">${formattedValue}</span>
-      <span class="price-unit">${escapeHtml(unitPart)}</span>
-    </div>
-  `.trim();
-}
-
-function normalizeQuantity(value, fallback = 1) {
-  const parsedValue = Number.parseInt(String(value ?? "").trim(), 10);
-  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
-    return fallback;
-  }
-  return parsedValue;
-}
-
-function getSortablePriceValue(row) {
-  if (!row) {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  const parsedPrice = parsePriceText(row.prezzo);
-  return Number.isFinite(parsedPrice.value) ? parsedPrice.value : Number.POSITIVE_INFINITY;
-}
-
-function compareRowsByBestPrice(rowA, rowB) {
-  const priceA = getSortablePriceValue(rowA);
-  const priceB = getSortablePriceValue(rowB);
-  if (priceA !== priceB) {
-    return priceA - priceB;
-  }
-
-  const nameA = String(rowA?.rivenditore_name || "");
-  const nameB = String(rowB?.rivenditore_name || "");
-  return nameA.localeCompare(nameB, "it");
-}
-
-function getRowQuantityValue(row) {
-  return normalizeQuantity(row?.quantity, 1);
-}
-
-function normalizeOwnerValue(value) {
-  return String(value || "").trim();
-}
-
-function normalizeAlphabetSource(value) {
-  return String(value || "")
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-function normalizeOwnerKey(value) {
-  return normalizeOwnerValue(value).toLowerCase();
-}
-
-function normalizeSortKey(value) {
-  const normalizedValue = String(value || "").trim().toLowerCase();
-  return SORTABLE_COLUMN_KEYS.includes(normalizedValue) ? normalizedValue : "prodotto";
-}
-
-function normalizeSortDirection(value) {
-  return String(value || "").trim().toLowerCase() === "desc" ? "desc" : "asc";
-}
-
-function getProductAlphabetLetter(value) {
-  const normalized = normalizeAlphabetSource(value);
-  const firstCharacter = normalized.charAt(0).toUpperCase();
-  return /^[A-Z]$/.test(firstCharacter) ? firstCharacter : "#";
 }
 
 function getCachedOwner() {
@@ -630,10 +449,6 @@ function syncDefaultRivenditoreSelection() {
   }
 
   return;
-}
-
-function compareTextValues(valueA, valueB) {
-  return String(valueA || "").localeCompare(String(valueB || ""), "it", { sensitivity: "base" });
 }
 
 function compareProductGroups(groupA, groupB) {
@@ -855,7 +670,7 @@ function renderAlphabetIndex() {
       .filter((letter) => letter !== "#")
   );
 
-  elements.alphabetIndex.innerHTML = ALPHABET_INDEX_LETTERS.map((letter) => {
+  const markup = ALPHABET_INDEX_LETTERS.map((letter) => {
     const isAvailable = availableLetters.has(letter);
     return `
       <button
@@ -870,6 +685,11 @@ function renderAlphabetIndex() {
       </button>
     `;
   }).join("");
+
+  if (state.renderCache.alphabetMarkup !== markup) {
+    elements.alphabetIndex.innerHTML = markup;
+    state.renderCache.alphabetMarkup = markup;
+  }
 
   updateStickyAlphabetMetrics();
 }
@@ -1036,9 +856,7 @@ function clearCurrentOwner() {
   renderSelectedRowsBox();
   updateSelectAllCheckboxState();
   showTableMessage("Seleziona un owner per caricare il listino.");
-  if (elements.tableCounter) {
-    elements.tableCounter.textContent = "owner richiesto";
-  }
+  setTableCounterText("owner richiesto");
   setOwnerStatus("Seleziona un owner per caricare il listino.");
   syncUrlState();
 }
@@ -1301,56 +1119,12 @@ function handleRowRivenditoreDropdownOptionClick(event) {
   }
 }
 
-function buildProductGroups() {
-  const productMap = new Map();
-
-  state.rows.forEach((row) => {
-    const productKey = row.prodotto;
-    if (!productMap.has(productKey)) {
-      productMap.set(productKey, {
-        product: productKey,
-        rows: []
-      });
-    }
-    productMap.get(productKey).rows.push(row);
-  });
-
-  return [...productMap.values()]
-    .map((group) => {
-      const uniqueRivenditoreRows = new Map();
-      group.rows.forEach((row) => {
-        const rivenditoreKey = String(row.retailer_id ?? row.rivenditore_name ?? "");
-        const existingRow = uniqueRivenditoreRows.get(rivenditoreKey);
-        if (!existingRow) {
-          uniqueRivenditoreRows.set(rivenditoreKey, row);
-          return;
-        }
-
-        const existingDate = new Date(existingRow.created_at || 0).getTime();
-        const currentDate = new Date(row.created_at || 0).getTime();
-        if (currentDate >= existingDate) {
-          uniqueRivenditoreRows.set(rivenditoreKey, row);
-        }
-      });
-
-      const rows = [...uniqueRivenditoreRows.values()].sort(compareRowsByBestPrice);
-
-      const savedRivenditoreId = state.selectedRivenditoreByProduct[group.product];
-      const selectedRow = rows.find((row) => String(row.retailer_id) === String(savedRivenditoreId))
-        || rows[0];
-
-      return {
-        product: group.product,
-        rows,
-        selectedRivenditoreId: String(selectedRow.retailer_id),
-        selectedRow
-      };
-    })
-    .sort((a, b) => a.product.localeCompare(b.product, "it"));
+function getCurrentProductGroups() {
+  return selectProductGroups(state.rows, state.selectedRivenditoreByProduct);
 }
 
 function getSelectedProductSummaries() {
-  const productGroups = buildProductGroups();
+  const productGroups = getCurrentProductGroups();
   const groupMap = new Map(productGroups.map((group) => [group.product, group]));
 
   return Object.keys(state.checkedProducts)
@@ -1538,17 +1312,34 @@ function renderSelectedRowsBox() {
 
   const selectedItems = getSelectedProductSummaries();
   if (!selectedItems.length) {
-    elements.selectedRowsBox.classList.add("hidden");
-    elements.selectedRowsCount.textContent = "0 selezionati";
-    elements.selectedRowsList.innerHTML = ""; // Cambiato da textContent
+    const emptyCount = "0 selezionati";
+    if (state.renderCache.selectedRowsCount !== emptyCount) {
+      elements.selectedRowsCount.textContent = emptyCount;
+      state.renderCache.selectedRowsCount = emptyCount;
+    }
+    if (state.renderCache.selectedRowsMarkup !== "") {
+      elements.selectedRowsList.innerHTML = "";
+      state.renderCache.selectedRowsMarkup = "";
+    }
     elements.selectedRowsCopyButton.disabled = true;
     elements.selectedRowsClearButton.disabled = true;
     elements.selectedRowsClearButton.classList.add("hidden");
+    state.renderCache.selectedRowsClearDisabled = true;
+    state.renderCache.selectedRowsClearHidden = true;
+    if (!state.renderCache.selectedRowsHidden) {
+      elements.selectedRowsBox.classList.add("hidden");
+      state.renderCache.selectedRowsHidden = true;
+    }
     return;
   }
 
-  elements.selectedRowsCount.textContent = `${selectedItems.length} selezionat${selectedItems.length === 1 ? "o" : "i"}`;
-  
+  const countText = `${selectedItems.length} selezionat${selectedItems.length === 1 ? "o" : "i"}`;
+  if (state.renderCache.selectedRowsCount !== countText) {
+    elements.selectedRowsCount.textContent = countText;
+    state.renderCache.selectedRowsCount = countText;
+  }
+
+  let markup = "";
   if (selectedItems.length > 5) {
     const grouped = new Map();
     selectedItems.forEach(item => {
@@ -1558,30 +1349,43 @@ function renderSelectedRowsBox() {
     });
 
     const sortedCats = [...grouped.keys()].sort((a, b) => a.localeCompare(b, "it"));
-    
-    let html = "";
+
     sortedCats.forEach(cat => {
-      html += `<div class="selection-category-header">${escapeHtml(cat)}</div>`;
+      markup += `<div class="selection-category-header">${escapeHtml(cat)}</div>`;
       grouped.get(cat).forEach(({ product, row }) => {
         const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
         const itemText = `  ${escapeHtml(getRowQuantityValue(row))}x ${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
-        html += `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${itemText}</div>`;
+        markup += `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${itemText}</div>`;
       });
     });
-    elements.selectedRowsList.innerHTML = html;
   } else {
-    elements.selectedRowsList.innerHTML = selectedItems.map(({ product, row }) => {
+    markup = selectedItems.map(({ product, row }) => {
       const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
       const text = `${escapeHtml(getRowQuantityValue(row))}x ${escapeHtml(product)} | ${escapeHtml(row.rivenditore_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
       return `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${text}</div>`;
     }).join("");
   }
 
+  if (state.renderCache.selectedRowsMarkup !== markup) {
+    elements.selectedRowsList.innerHTML = markup;
+    state.renderCache.selectedRowsMarkup = markup;
+  }
+
   const crossedProducts = selectedItems.filter(({ product }) => Boolean(state.crossedOutProducts[product]));
   elements.selectedRowsCopyButton.disabled = false;
-  elements.selectedRowsClearButton.disabled = crossedProducts.length === 0;
-  elements.selectedRowsClearButton.classList.toggle("hidden", crossedProducts.length === 0);
-  elements.selectedRowsBox.classList.remove("hidden");
+  const clearDisabled = crossedProducts.length === 0;
+  if (state.renderCache.selectedRowsClearDisabled !== clearDisabled) {
+    elements.selectedRowsClearButton.disabled = clearDisabled;
+    state.renderCache.selectedRowsClearDisabled = clearDisabled;
+  }
+  if (state.renderCache.selectedRowsClearHidden !== clearDisabled) {
+    elements.selectedRowsClearButton.classList.toggle("hidden", clearDisabled);
+    state.renderCache.selectedRowsClearHidden = clearDisabled;
+  }
+  if (state.renderCache.selectedRowsHidden) {
+    elements.selectedRowsBox.classList.remove("hidden");
+    state.renderCache.selectedRowsHidden = false;
+  }
 }
 
 async function handleSelectedRowClick(event) {
@@ -1715,7 +1519,7 @@ function applyFilters(options = {}) {
   const rivenditoreId = state.formRivenditoreId;
   const category = state.formCategoryValue;
 
-  const groupedProducts = buildProductGroups();
+  const groupedProducts = getCurrentProductGroups();
   const filteredGroups = groupedProducts.filter((group) => {
     const haystack = group.rows
       .flatMap((row) => [
@@ -1747,8 +1551,12 @@ function renderRows() {
   renderSortButtons();
 
   if (!state.filteredProducts.length) {
-    elements.rowsBody.innerHTML = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Nessuna riga trovata.</td></tr>`;
-    elements.tableCounter.textContent = "0 prodotti";
+    const emptyMarkup = `<tr><td colspan="${TABLE_COLUMN_COUNT}">Nessuna riga trovata.</td></tr>`;
+    if (state.renderCache.rowsMarkup !== emptyMarkup) {
+      elements.rowsBody.innerHTML = emptyMarkup;
+      state.renderCache.rowsMarkup = emptyMarkup;
+    }
+    setTableCounterText("0 prodotti");
     renderAlphabetIndex();
     renderSelectedRowsBox();
     updateSelectAllCheckboxState();
@@ -1860,7 +1668,11 @@ function renderRows() {
               data-category="${escapeHtml(row.categoria)}"
               title="Filtra per ${escapeHtml(row.categoria_display)}"
             >
-              ${escapeHtml(row.categoria_display)}
+              ${row.categoria_display && row.categoria_display !== row.categoria
+                ? `<span class="category-link-icon" aria-hidden="true">${escapeHtml(String(row.categoria_display).replace(String(row.categoria), "").trim())}</span>`
+                : ""
+              }
+              <span class="category-link-text">${escapeHtml(row.categoria)}</span>
             </a>
           ` : "-"}
         </td>
@@ -1897,9 +1709,12 @@ function renderRows() {
     `;
   }).join("");
 
-  elements.rowsBody.innerHTML = rowsMarkup;
+  if (state.renderCache.rowsMarkup !== rowsMarkup) {
+    elements.rowsBody.innerHTML = rowsMarkup;
+    state.renderCache.rowsMarkup = rowsMarkup;
+  }
 
-  elements.tableCounter.textContent = `${state.filteredProducts.length} prodotti`;
+  setTableCounterText(`${state.filteredProducts.length} prodotti`);
   renderAlphabetIndex();
   renderSelectedRowsBox();
   updateSelectAllCheckboxState();
@@ -2045,9 +1860,7 @@ async function refreshData() {
   state.cachedCategories = null;
   if (!state.currentOwner) {
     showTableMessage("Seleziona un owner per caricare il listino.");
-    if (elements.tableCounter) {
-      elements.tableCounter.textContent = "owner richiesto";
-    }
+    setTableCounterText("owner richiesto");
     return;
   }
 
@@ -2793,7 +2606,13 @@ function handlePriceResetFilters() {
 
 function handleFormProductInput() {
   state.formSearchTerm = elements.priceForm.elements.prodotto.value.trim();
-  applyFilters();
+  if (state.filterInputTimeoutId !== null) {
+    window.clearTimeout(state.filterInputTimeoutId);
+  }
+  state.filterInputTimeoutId = window.setTimeout(() => {
+    state.filterInputTimeoutId = null;
+    applyFilters();
+  }, FILTER_INPUT_DEBOUNCE_MS);
 }
 
 function handleFeedbackClick(event) {

@@ -143,6 +143,12 @@ create unique index if not exists idx_retailers_one_default_per_owner
 on public.retailers(owner)
 where is_default;
 
+create index if not exists idx_retailers_name
+on public.retailers(name);
+
+create index if not exists idx_retailers_owner_default_name
+on public.retailers(owner, is_default desc, name);
+
 create unique index if not exists idx_categories_owner_name_unique
 on public.categories(owner, name);
 
@@ -192,11 +198,15 @@ create index if not exists idx_listino_owner on public.listino_prezzi_raw(owner)
 create index if not exists idx_listino_prodotto on public.listino_prezzi_raw(prodotto);
 create index if not exists idx_listino_owner_prodotto on public.listino_prezzi_raw(owner, prodotto);
 drop index if exists idx_listino_categoria;
+drop index if exists idx_listino_rivenditore;
+drop index if exists idx_listino_retailer;
 create index if not exists idx_listino_category_id on public.listino_prezzi_raw(category_id);
-create index if not exists idx_listino_rivenditore on public.listino_prezzi_raw(retailer_id);
+create index if not exists idx_listino_retailer on public.listino_prezzi_raw(retailer_id);
+create index if not exists idx_listino_owner_created_at_desc on public.listino_prezzi_raw(owner, created_at desc);
 
+drop trigger if exists trg_retailers_updated_at on public.retailers;
 drop trigger if exists trg_rivenditores_updated_at on public.retailers;
-create trigger trg_rivenditores_updated_at
+create trigger trg_retailers_updated_at
 before update on public.retailers
 for each row execute function public.set_updated_at();
 

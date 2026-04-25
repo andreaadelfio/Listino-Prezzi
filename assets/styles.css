@@ -150,10 +150,13 @@ select {
   color: var(--accent-deep);
   text-decoration: underline;
   text-underline-offset: 0.1em;
+  display: block;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  width: 100%;
 }
 
 .rivenditore-link:hover {
@@ -203,7 +206,19 @@ select {
 }
 
 .category-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--accent-deep);
+  text-decoration: none;
+}
+
+.category-link-icon {
+  flex: 0 0 auto;
+  text-decoration: none;
+}
+
+.category-link-text {
   text-decoration: underline;
   text-underline-offset: 0.1em;
 }
@@ -712,10 +727,24 @@ td[data-label="Prezzo"] {
 }
 
 .row-rivenditore-cell {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.4rem;
+  justify-content: center;
+  padding-left: 2.4rem;
+  padding-right: 2.4rem;
+  width: 100%;
+}
+
+.row-rivenditore-cell .icon-button {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.row-rivenditore-cell .icon-button:hover {
+  transform: translateY(calc(-50% - 1px));
 }
 
 td[data-label="Prezzo"] {
