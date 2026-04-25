@@ -120,7 +120,17 @@
                 <span class="entry-selection-placeholder"></span>
                   </td>
                   <td data-label="Prodotto">
-                <input form="price-form" name="prodotto" type="search" placeholder="Cerca o aggiungi..." required>
+                <div class="product-input-shell">
+                  <input id="product-input" class="product-input" form="price-form" name="prodotto" type="search" placeholder="Cerca o aggiungi..." required autocomplete="off">
+                  <button
+                    id="product-inline-suggestion"
+                    class="product-inline-suggestion hidden"
+                    type="button"
+                    aria-label="Completa con suggerimento prodotto"
+                    tabindex="-1"
+                  ></button>
+                  <span id="product-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
+                </div>
                   </td>
                   <td data-label="Rivenditore">
                 <div class="rivenditore-picker">

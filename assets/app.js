@@ -16,6 +16,7 @@ import {
   getProductAlphabetLetter,
   getRowQuantityValue,
   getSortablePriceValue,
+  normalizeAlphabetSource,
   normalizeOwnerKey,
   normalizeOwnerValue,
   normalizeQuantity,
@@ -190,9 +191,10 @@ function clearFeedback() {
 function setFormSearchValue(value) {
   const normalizedValue = String(value || "").trim();
   state.formSearchTerm = normalizedValue;
-  if (elements.priceForm?.elements?.prodotto) {
-    elements.priceForm.elements.prodotto.value = normalizedValue;
+  if (elements.productInput) {
+    elements.productInput.value = normalizedValue;
   }
+  renderProductInlineSuggestion();
 }
 
 function highlightProductRow(row) {
@@ -694,6 +696,103 @@ function renderAlphabetIndex() {
   updateStickyAlphabetMetrics();
 }
 
+function getProductSuggestionCandidate(inputValue) {
+  const rawInput = String(inputValue || "");
+  const tokenMatch = rawInput.match(/^(.*?)([^\s,.;:!?()\-_/]+)$/);
+  if (!tokenMatch) {
+    return null;
+  }
+
+  const [, prefix, token] = tokenMatch;
+  if (token.length < 3) {
+    return null;
+  }
+
+  const normalizedNeedle = normalizeAlphabetSource(token).toLocaleLowerCase("it");
+  const words = [...new Set(
+    state.rows
+      .flatMap((row) => String(row?.prodotto || "").split(/[\s,.;:!?()\-_/]+/))
+      .map((word) => String(word || "").trim())
+      .filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, "it"));
+
+  const exactMatch = words.find((word) => word.localeCompare(token, "it", { sensitivity: "base" }) === 0);
+  if (exactMatch) {
+    return null;
+  }
+
+  const suggestionWord = words.find((word) =>
+    normalizeAlphabetSource(word).toLocaleLowerCase("it").startsWith(normalizedNeedle)
+  );
+
+  if (!suggestionWord) {
+    return null;
+  }
+
+  const suffix = suggestionWord.slice(token.length);
+  if (!suffix) {
+    return null;
+  }
+
+  return {
+    completedValue: `${prefix}${suggestionWord}`,
+    suffix
+  };
+}
+
+function renderProductInlineSuggestion() {
+  if (!elements.productInput || !elements.productInlineSuggestion || !elements.productInlineMeasure) {
+    return;
+  }
+
+  const inputValue = String(elements.productInput.value || "");
+  const suggestion = getProductSuggestionCandidate(inputValue);
+  state.productInlineSuggestion = suggestion;
+
+  if (!suggestion) {
+    elements.productInlineSuggestion.textContent = "";
+    elements.productInlineSuggestion.classList.add("hidden");
+    if (elements.productInput.parentElement) {
+      elements.productInput.parentElement.style.setProperty("--product-suggestion-offset", "0px");
+    }
+    return;
+  }
+
+  const { suffix } = suggestion;
+  if (!suffix) {
+    elements.productInlineSuggestion.textContent = "";
+    elements.productInlineSuggestion.classList.add("hidden");
+    return;
+  }
+
+  elements.productInlineMeasure.textContent = inputValue;
+  const inputStyles = window.getComputedStyle(elements.productInput);
+  elements.productInlineMeasure.style.font = inputStyles.font;
+  elements.productInlineMeasure.style.fontSize = inputStyles.fontSize;
+  elements.productInlineMeasure.style.fontWeight = inputStyles.fontWeight;
+  elements.productInlineMeasure.style.letterSpacing = inputStyles.letterSpacing;
+
+  const textWidth = elements.productInlineMeasure.getBoundingClientRect().width;
+  elements.productInput.parentElement?.style.setProperty("--product-suggestion-offset", `${textWidth}px`);
+  elements.productInlineSuggestion.textContent = suffix;
+  elements.productInlineSuggestion.classList.remove("hidden");
+}
+
+function applyProductInlineSuggestion() {
+  if (!elements.productInput || !state.productInlineSuggestion) {
+    return;
+  }
+
+  const nextValue = state.productInlineSuggestion.completedValue;
+  elements.productInput.value = nextValue;
+  state.formSearchTerm = nextValue;
+  state.productInlineSuggestion = null;
+  renderProductInlineSuggestion();
+  applyFilters();
+  elements.productInput.focus();
+  elements.productInput.setSelectionRange(nextValue.length, nextValue.length);
+}
+
 function updateStickyAlphabetMetrics() {
   const stickyTop = 6;
   const tableHeadHeight = elements.tableHead?.getBoundingClientRect().height || 0;
@@ -866,7 +965,9 @@ function setPriceFormMode(mode, row = null) {
     state.editingRowId = row.id;
     elements.entryRow?.classList.add("entry-row-editing");
 
-    elements.priceForm.elements.prodotto.value = row.prodotto || "";
+    if (elements.productInput) {
+      elements.productInput.value = row.prodotto || "";
+    }
     elements.priceForm.elements.prezzo.value = row.prezzo || "";
     state.rivenditoreSearchTerm = "";
     state.categorySearchTerm = "";
@@ -874,6 +975,7 @@ function setPriceFormMode(mode, row = null) {
     setFormCategorySelection(row.categoria || "");
     closeRivenditoreDropdown();
     closeCategoryDropdown();
+    renderProductInlineSuggestion();
     return;
   }
 
@@ -887,6 +989,8 @@ function setPriceFormMode(mode, row = null) {
   state.formSearchTerm = "";
   closeRivenditoreDropdown();
   closeCategoryDropdown();
+  state.productInlineSuggestion = null;
+  renderProductInlineSuggestion();
 }
 
 function closeRivenditoreDropdown() {
@@ -1853,6 +1957,7 @@ async function loadRows() {
 
   applyFilters();
   renderCategoryList();
+  renderProductInlineSuggestion();
 
 }
 
@@ -2598,14 +2703,17 @@ function handlePriceResetFilters() {
   state.formRivenditoreId = "";
   state.formCategoryValue = "";
   state.formSearchTerm = "";
+  state.productInlineSuggestion = null;
 
   renderRivenditoreList();
   renderCategoryList();
+  renderProductInlineSuggestion();
   applyFilters();
 }
 
 function handleFormProductInput() {
-  state.formSearchTerm = elements.priceForm.elements.prodotto.value.trim();
+  state.formSearchTerm = elements.productInput?.value.trim() || "";
+  renderProductInlineSuggestion();
   if (state.filterInputTimeoutId !== null) {
     window.clearTimeout(state.filterInputTimeoutId);
   }
@@ -2613,6 +2721,15 @@ function handleFormProductInput() {
     state.filterInputTimeoutId = null;
     applyFilters();
   }, FILTER_INPUT_DEBOUNCE_MS);
+}
+
+function handleProductInputKeydown(event) {
+  if (event.key !== "Tab" || !state.productInlineSuggestion) {
+    return;
+  }
+
+  event.preventDefault();
+  applyProductInlineSuggestion();
 }
 
 function handleFeedbackClick(event) {
@@ -2632,6 +2749,10 @@ function handleFeedbackClick(event) {
   }
 
   revealProductInTable(product);
+}
+
+function handleProductInlineSuggestionClick() {
+  applyProductInlineSuggestion();
 }
 
 function handleRowsBodyInput(event) {
@@ -2673,7 +2794,9 @@ function bindEvents() {
   // Form inserimento/modifica
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceResetFiltersButton?.addEventListener("click", handleCancelEdit);
-  elements.priceForm.elements.prodotto.addEventListener("input", handleFormProductInput);
+  elements.productInput?.addEventListener("input", handleFormProductInput);
+  elements.productInput?.addEventListener("keydown", handleProductInputKeydown);
+  elements.productInlineSuggestion?.addEventListener("click", handleProductInlineSuggestionClick);
   elements.feedback?.addEventListener("click", handleFeedbackClick);
 
   // Rivenditore e Categoria dropdown (nel form)

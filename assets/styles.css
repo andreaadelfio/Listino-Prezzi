@@ -334,6 +334,69 @@ select {
   color: var(--ink);
 }
 
+.product-input-shell {
+  --product-suggestion-offset: 0px;
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 250, 244, 0.95);
+}
+
+.product-input {
+  position: relative;
+  z-index: 2;
+  border: 0;
+  background: transparent;
+}
+
+.product-input:focus {
+  outline: none;
+}
+
+.product-input-shell:focus-within {
+  border-color: rgba(166, 75, 42, 0.28);
+  box-shadow: 0 0 0 2px rgba(166, 75, 42, 0.08);
+}
+
+.product-inline-suggestion {
+  position: absolute;
+  top: 50%;
+  left: calc(0.4rem + var(--product-suggestion-offset));
+  z-index: 3;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(89, 101, 93, 0.72);
+  font: inherit;
+  line-height: 1.3;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.product-inline-suggestion:hover,
+.product-inline-suggestion:focus-visible {
+  color: var(--accent-deep);
+}
+
+.product-inline-suggestion:focus-visible {
+  outline: 2px solid rgba(166, 75, 42, 0.2);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.product-inline-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre;
+  font: inherit;
+  letter-spacing: inherit;
+  padding: 0.4rem 0.4rem;
+}
+
 .primary-button,
 .secondary-button,
 .pill {

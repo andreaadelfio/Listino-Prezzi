@@ -31,6 +31,7 @@ export const state = {
   supabaseClient: null,
   openRowRivenditoreProduct: null,
   filterInputTimeoutId: null,
+  productInlineSuggestion: null,
   renderCache: {
     rowsMarkup: "",
     alphabetMarkup: "",
@@ -56,6 +57,9 @@ export const elements = {
   ownerStatus: document.querySelector("#owner-status"),
   refreshButton: document.querySelector("#refresh-button"),
   priceForm: document.querySelector("#price-form"),
+  productInput: document.querySelector("#product-input"),
+  productInlineSuggestion: document.querySelector("#product-inline-suggestion"),
+  productInlineMeasure: document.querySelector("#product-inline-measure"),
   priceSubmitButton: document.querySelector("#price-submit-button"),
   priceResetFiltersButton: document.querySelector("#price-reset-filters-button"),
   priceCancelButton: document.querySelector("#price-cancel-button"),
