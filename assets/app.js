@@ -709,29 +709,13 @@ function getProductSuggestionCandidate(inputValue) {
   }
 
   const normalizedNeedle = normalizeAlphabetSource(token).toLocaleLowerCase("it");
-  const historicalWords = state.rows
-    .flatMap((row) => String(row?.prodotto || "").split(/[^\p{L}]+/u))
-    .map((word) => String(word || "").trim())
-    .filter((word) => word && word.length >= 5 && !/\d/.test(word));
-  const words = [...new Set([
-    ...historicalWords,
-    ...state.productVocabularyWords
-  ]
-    .map((word) => String(word || "").trim())
-    .filter((word) => word && word.length >= 5 && !/\d/.test(word))
-  )].sort((a, b) => a.localeCompare(b, "it"));
-
-  const rankedWords = [
-    ...words.filter((word) => historicalWords.some((historicalWord) => historicalWord.localeCompare(word, "it", { sensitivity: "base" }) === 0)),
-    ...words.filter((word) => !historicalWords.some((historicalWord) => historicalWord.localeCompare(word, "it", { sensitivity: "base" }) === 0))
-  ];
-
-  const exactMatch = rankedWords.find((word) => word.localeCompare(token, "it", { sensitivity: "base" }) === 0);
+  
+  const exactMatch = state.rankedWords.find((word) => word.localeCompare(token, "it", { sensitivity: "base" }) === 0);
   if (exactMatch) {
     return null;
   }
-
-  const suggestionWord = rankedWords.find((word) =>
+  
+  const suggestionWord = state.rankedWords.find((word) =>
     normalizeAlphabetSource(word).toLocaleLowerCase("it").startsWith(normalizedNeedle)
   );
 
@@ -1947,6 +1931,23 @@ async function loadProductVocabulary() {
   state.productVocabularyWords = (data || [])
     .map((row) => String(row.word || "").trim())
     .filter(Boolean);
+
+  const historicalWords = state.rows
+  .flatMap((row) => String(row?.prodotto || "").split(/[^\p{L}]+/u))
+  .map((word) => String(word.toLowerCase() || "").trim())
+  .filter((word) => word && word.length >= 5 && !/\d/.test(word));
+  const words = [...new Set([
+    ...historicalWords,
+    ...state.productVocabularyWords
+  ]
+    .map((word) => String(word || "").trim())
+    .filter((word) => word && word.length >= 5 && !/\d/.test(word))
+  )].sort((a, b) => a.localeCompare(b, "it"));
+  
+  state.rankedWords = [
+    ...words.filter((word) => historicalWords.some((historicalWord) => historicalWord.localeCompare(word, "it", { sensitivity: "base" }) === 0)),
+    ...words.filter((word) => !historicalWords.some((historicalWord) => historicalWord.localeCompare(word, "it", { sensitivity: "base" }) === 0))
+  ];
   renderProductInlineSuggestion();
 }
 

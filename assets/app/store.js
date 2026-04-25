@@ -4,6 +4,7 @@ export const state = {
   ownerDropdownOpen: false,
   ownerSearchTerm: "",
   productVocabularyWords: [],
+  rankedWords: [],
   rivenditores: [],
   categories: [],
   rows: [],
