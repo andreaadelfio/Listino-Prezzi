@@ -698,6 +698,9 @@ function renderAlphabetIndex() {
 
 function getProductSuggestionCandidate(inputValue) {
   const rawInput = String(inputValue || "");
+  if (rawInput.length < 3) {
+    return null;
+  }
   const tokenMatch = rawInput.match(/^(.*?)([\p{L}]+)$/u);
   if (!tokenMatch) {
     return null;
@@ -729,7 +732,7 @@ function getProductSuggestionCandidate(inputValue) {
   }
 
   return {
-    completedValue: `${prefix}${suggestionWord}`,
+    completedValue: `${prefix}${token}${suffix}`,
     suffix
   };
 }

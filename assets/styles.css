@@ -394,7 +394,7 @@ select {
   white-space: pre;
   font: inherit;
   letter-spacing: inherit;
-  padding: 0.4rem 0.4rem;
+  padding: 0.4rem 0;
 }
 
 .primary-button,
