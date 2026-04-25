@@ -3,6 +3,7 @@ export const state = {
   currentOwner: "",
   ownerDropdownOpen: false,
   ownerSearchTerm: "",
+  productVocabularyWords: [],
   rivenditores: [],
   categories: [],
   rows: [],

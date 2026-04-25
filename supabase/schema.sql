@@ -117,6 +117,17 @@ create table if not exists public.categories (
 alter table public.categories
 add column if not exists icon text;
 
+create table if not exists public.product_vocabulary (
+  id bigint generated always as identity primary key,
+  owner text not null default 'default',
+  word text not null,
+  usage_count integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_by uuid references auth.users(id),
+  constraint product_vocabulary_usage_count_check check (usage_count >= 1)
+);
+
 create table if not exists public.listino_prezzi_raw (
   id bigint generated always as identity primary key,
   owner text not null default 'default',
@@ -151,6 +162,12 @@ on public.retailers(owner, is_default desc, name);
 
 create unique index if not exists idx_categories_owner_name_unique
 on public.categories(owner, name);
+
+create unique index if not exists idx_product_vocabulary_owner_word_unique
+on public.product_vocabulary(owner, lower(word));
+
+create index if not exists idx_product_vocabulary_owner_word
+on public.product_vocabulary(owner, word);
 
 alter table public.listino_prezzi_raw
 add column if not exists category_id bigint;
@@ -204,6 +221,51 @@ create index if not exists idx_listino_category_id on public.listino_prezzi_raw(
 create index if not exists idx_listino_retailer on public.listino_prezzi_raw(retailer_id);
 create index if not exists idx_listino_owner_created_at_desc on public.listino_prezzi_raw(owner, created_at desc);
 
+create or replace function public.sync_product_vocabulary_from_listino()
+returns trigger
+language plpgsql
+as $$
+declare
+  token text;
+begin
+  if tg_op = 'UPDATE'
+     and old.prodotto is not distinct from new.prodotto
+     and old.owner = new.owner then
+    return new;
+  end if;
+
+  for token in
+    select distinct lower(btrim(value))
+    from regexp_split_to_table(coalesce(new.prodotto, ''), '[^[:alpha:]]+') as value
+    where btrim(value) <> ''
+      and btrim(value) !~ '[0-9]'
+      and char_length(btrim(value)) >= 5
+  loop
+    insert into public.product_vocabulary (owner, word, created_by)
+    values (new.owner, token, new.created_by)
+    on conflict (owner, lower(word))
+    do update set
+      usage_count = public.product_vocabulary.usage_count + 1,
+      updated_at = now();
+  end loop;
+
+  return new;
+end;
+$$;
+
+insert into public.product_vocabulary (owner, word, created_by)
+select distinct
+  l.owner,
+  lower(btrim(token.value)) as word,
+  l.created_by
+from public.listino_prezzi_raw l
+cross join regexp_split_to_table(coalesce(l.prodotto, ''), '[^[:alpha:]]+') as token(value)
+where btrim(token.value) <> ''
+  and btrim(token.value) !~ '[0-9]'
+  and char_length(btrim(token.value)) >= 5
+on conflict (owner, lower(word))
+do nothing;
+
 drop trigger if exists trg_retailers_updated_at on public.retailers;
 drop trigger if exists trg_rivenditores_updated_at on public.retailers;
 create trigger trg_retailers_updated_at
@@ -215,6 +277,11 @@ create trigger trg_categories_updated_at
 before update on public.categories
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_product_vocabulary_updated_at on public.product_vocabulary;
+create trigger trg_product_vocabulary_updated_at
+before update on public.product_vocabulary
+for each row execute function public.set_updated_at();
+
 drop trigger if exists trg_listino_updated_at on public.listino_prezzi_raw;
 create trigger trg_listino_updated_at
 before update on public.listino_prezzi_raw
@@ -224,6 +291,11 @@ drop trigger if exists trg_listino_selection_flags on public.listino_prezzi_raw;
 create trigger trg_listino_selection_flags
 before insert or update on public.listino_prezzi_raw
 for each row execute function public.sync_listino_selection_flags();
+
+drop trigger if exists trg_listino_sync_product_vocabulary on public.listino_prezzi_raw;
+create trigger trg_listino_sync_product_vocabulary
+after insert or update on public.listino_prezzi_raw
+for each row execute function public.sync_product_vocabulary_from_listino();
 
 drop trigger if exists trg_cleanup_orphan_retailers on public.listino_prezzi_raw;
 create trigger trg_cleanup_orphan_retailers
@@ -239,6 +311,7 @@ drop view if exists public.listino_prezzi_raw_excel;
 
 alter table public.retailers enable row level security;
 alter table public.categories enable row level security;
+alter table public.product_vocabulary enable row level security;
 alter table public.listino_prezzi_raw enable row level security;
 
 drop policy if exists "public can read rivenditores" on public.retailers;
@@ -295,6 +368,35 @@ with check (true);
 drop policy if exists "public can delete categories" on public.categories;
 create policy "public can delete categories"
 on public.categories
+for delete
+to anon, authenticated
+using (true);
+
+drop policy if exists "public can read product vocabulary" on public.product_vocabulary;
+create policy "public can read product vocabulary"
+on public.product_vocabulary
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "public can insert product vocabulary" on public.product_vocabulary;
+create policy "public can insert product vocabulary"
+on public.product_vocabulary
+for insert
+to anon, authenticated
+with check (true);
+
+drop policy if exists "public can update product vocabulary" on public.product_vocabulary;
+create policy "public can update product vocabulary"
+on public.product_vocabulary
+for update
+to anon, authenticated
+using (true)
+with check (true);
+
+drop policy if exists "public can delete product vocabulary" on public.product_vocabulary;
+create policy "public can delete product vocabulary"
+on public.product_vocabulary
 for delete
 to anon, authenticated
 using (true);

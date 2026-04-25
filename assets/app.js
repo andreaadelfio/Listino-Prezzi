@@ -698,7 +698,7 @@ function renderAlphabetIndex() {
 
 function getProductSuggestionCandidate(inputValue) {
   const rawInput = String(inputValue || "");
-  const tokenMatch = rawInput.match(/^(.*?)([^\s,.;:!?()\-_/]+)$/);
+  const tokenMatch = rawInput.match(/^(.*?)([\p{L}]+)$/u);
   if (!tokenMatch) {
     return null;
   }
@@ -709,19 +709,29 @@ function getProductSuggestionCandidate(inputValue) {
   }
 
   const normalizedNeedle = normalizeAlphabetSource(token).toLocaleLowerCase("it");
-  const words = [...new Set(
-    state.rows
-      .flatMap((row) => String(row?.prodotto || "").split(/[\s,.;:!?()\-_/]+/))
-      .map((word) => String(word || "").trim())
-      .filter(Boolean)
+  const historicalWords = state.rows
+    .flatMap((row) => String(row?.prodotto || "").split(/[^\p{L}]+/u))
+    .map((word) => String(word || "").trim())
+    .filter((word) => word && word.length >= 5 && !/\d/.test(word));
+  const words = [...new Set([
+    ...historicalWords,
+    ...state.productVocabularyWords
+  ]
+    .map((word) => String(word || "").trim())
+    .filter((word) => word && word.length >= 5 && !/\d/.test(word))
   )].sort((a, b) => a.localeCompare(b, "it"));
 
-  const exactMatch = words.find((word) => word.localeCompare(token, "it", { sensitivity: "base" }) === 0);
+  const rankedWords = [
+    ...words.filter((word) => historicalWords.some((historicalWord) => historicalWord.localeCompare(word, "it", { sensitivity: "base" }) === 0)),
+    ...words.filter((word) => !historicalWords.some((historicalWord) => historicalWord.localeCompare(word, "it", { sensitivity: "base" }) === 0))
+  ];
+
+  const exactMatch = rankedWords.find((word) => word.localeCompare(token, "it", { sensitivity: "base" }) === 0);
   if (exactMatch) {
     return null;
   }
 
-  const suggestionWord = words.find((word) =>
+  const suggestionWord = rankedWords.find((word) =>
     normalizeAlphabetSource(word).toLocaleLowerCase("it").startsWith(normalizedNeedle)
   );
 
@@ -912,6 +922,10 @@ async function handleSelectAllChange(event) {
     visibleProducts.forEach((product) => {
       delete state.checkedProducts[product];
       delete state.crossedOutProducts[product];
+      if (state.quantityUpdateTimeoutIds.has(product)) {
+        window.clearTimeout(state.quantityUpdateTimeoutIds.get(product));
+        state.quantityUpdateTimeoutIds.delete(product);
+      }
       updateLocalSelectionFlagsForProduct(product, { selected: false, isScratched: false });
     });
     nextSelected = false;
@@ -920,7 +934,11 @@ async function handleSelectAllChange(event) {
   try {
     const { error } = await state.supabaseClient
       .from("listino_prezzi_raw")
-      .update({ selected: nextSelected, is_scratched: false })
+      .update({
+        selected: nextSelected,
+        is_scratched: false,
+        ...(nextSelected ? {} : { quantity: normalizeQuantity(1) })
+      })
       .eq("owner", state.currentOwner)
       .in("prodotto", visibleProducts);
 
@@ -940,6 +958,7 @@ async function handleSelectAllChange(event) {
 function clearCurrentOwner() {
   state.currentOwner = "";
   state.ownerSearchTerm = "";
+  state.productVocabularyWords = [];
   cacheOwner("");
   state.cachedCategories = null;
   state.rivenditores = [];
@@ -1303,10 +1322,16 @@ function updateLocalQuantityForProduct(product, quantity) {
 function updateLocalSelectionFlagsForProduct(product, { selected, isScratched }) {
   const normalizedSelected = Boolean(selected);
   const normalizedScratched = normalizedSelected && Boolean(isScratched);
+  const nextQuantity = normalizedSelected ? null : normalizeQuantity(1);
 
   state.rows = state.rows.map((row) => (
     row.prodotto === product
-      ? { ...row, selected: normalizedSelected, is_scratched: normalizedScratched }
+      ? {
+        ...row,
+        selected: normalizedSelected,
+        is_scratched: normalizedScratched,
+        ...(nextQuantity === null ? {} : { quantity: nextQuantity })
+      }
       : row
   ));
 
@@ -1315,9 +1340,12 @@ function updateLocalSelectionFlagsForProduct(product, { selected, isScratched })
       return group;
     }
 
-    const updatedRows = group.rows.map((row) => (
-      { ...row, selected: normalizedSelected, is_scratched: normalizedScratched }
-    ));
+    const updatedRows = group.rows.map((row) => ({
+      ...row,
+      selected: normalizedSelected,
+      is_scratched: normalizedScratched,
+      ...(nextQuantity === null ? {} : { quantity: nextQuantity })
+    }));
     const selectedRow = updatedRows.find(
       (row) => String(row.retailer_id) === String(group.selectedRivenditoreId)
     ) || updatedRows[0];
@@ -1709,6 +1737,7 @@ function renderRows() {
                 inputmode="numeric"
                 value="${quantity}"
                 aria-label="Quantita per ${escapeHtml(group.product)}"
+                ${isChecked ? "" : "disabled"}
               >
               <div class="quantity-stepper" aria-hidden="true">
                 <button
@@ -1720,6 +1749,7 @@ function renderRows() {
                   tabindex="-1"
                   aria-label="Aumenta quantita di ${escapeHtml(group.product)}"
                   title="Aumenta quantita"
+                  ${isChecked ? "" : "disabled"}
                 >
                   ▲
                 </button>
@@ -1732,6 +1762,7 @@ function renderRows() {
                   tabindex="-1"
                   aria-label="Diminuisci quantita di ${escapeHtml(group.product)}"
                   title="Diminuisci quantita"
+                  ${isChecked ? "" : "disabled"}
                 >
                   ▼
                 </button>
@@ -1898,6 +1929,27 @@ async function loadCategories() {
   renderCategoryList();
 }
 
+async function loadProductVocabulary() {
+  if (!state.currentOwner) {
+    state.productVocabularyWords = [];
+    renderProductInlineSuggestion();
+    return;
+  }
+
+  const { data, error } = await state.supabaseClient
+    .from("product_vocabulary")
+    .select("word")
+    .eq("owner", state.currentOwner)
+    .order("word", { ascending: true })
+    .limit(2000);
+
+  if (error) throw error;
+  state.productVocabularyWords = (data || [])
+    .map((row) => String(row.word || "").trim())
+    .filter(Boolean);
+  renderProductInlineSuggestion();
+}
+
 async function loadRows() {
   state.cachedCategories = null;
   if (!state.currentOwner) {
@@ -1974,6 +2026,7 @@ async function refreshData() {
   try {
     await loadRivenditores();
     await loadCategories();
+    await loadProductVocabulary();
     await loadRows();
   } catch (error) {
     showTableMessage(`Errore nel caricamento dati: ${error.message}`);
@@ -2485,11 +2538,16 @@ async function handleRowRivenditoreChange(event) {
 
     const previousSelected = Boolean(state.checkedProducts[product]);
     const previousScratched = Boolean(state.crossedOutProducts[product]);
+    const shouldResetQuantity = !target.checked;
 
     if (target.checked) {
       state.checkedProducts[product] = true;
     } else {
       delete state.checkedProducts[product];
+      if (state.quantityUpdateTimeoutIds.has(product)) {
+        window.clearTimeout(state.quantityUpdateTimeoutIds.get(product));
+        state.quantityUpdateTimeoutIds.delete(product);
+      }
     }
 
     delete state.crossedOutProducts[product];
@@ -2498,7 +2556,11 @@ async function handleRowRivenditoreChange(event) {
     try {
       const { error } = await state.supabaseClient
         .from("listino_prezzi_raw")
-        .update({ selected: target.checked, is_scratched: false })
+        .update({
+          selected: target.checked,
+          is_scratched: false,
+          ...(shouldResetQuantity ? { quantity: normalizeQuantity(1) } : {})
+        })
         .eq("prodotto", product)
         .eq("owner", state.currentOwner);
 
@@ -2529,6 +2591,7 @@ async function handleRowRivenditoreChange(event) {
       return;
     }
 
+    renderRows();
     updateSelectAllCheckboxState();
     renderSelectedRowsBox();
     syncUrlState();

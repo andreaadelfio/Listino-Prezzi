@@ -876,6 +876,11 @@ td[data-label="Prezzo"] {
   margin: 0;
 }
 
+.quantity-input:disabled {
+  color: rgba(89, 101, 93, 0.5);
+  cursor: default;
+}
+
 .quantity-stepper {
   display: flex;
   flex-direction: column;
@@ -905,6 +910,12 @@ td[data-label="Prezzo"] {
 .quantity-step-button:hover {
   background: rgba(166, 75, 42, 0.1);
   color: var(--accent-deep);
+}
+
+.quantity-step-button:disabled {
+  color: rgba(89, 101, 93, 0.38);
+  background: rgba(244, 239, 231, 0.55);
+  cursor: default;
 }
 
 th:last-child,
