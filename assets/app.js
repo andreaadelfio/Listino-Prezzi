@@ -790,6 +790,63 @@ function applyProductInlineSuggestion() {
   elements.productInput.setSelectionRange(nextValue.length, nextValue.length);
 }
 
+function getPriceSuggestionCandidate(inputValue) {
+  const rawInput = String(inputValue || "").trim();
+  // Se l'input è puramente numerico (con . o ,), suggeriamo €/kg
+  if (/^\d+([.,]\d*)?$/.test(rawInput) && rawInput.length > 0) {
+    return {
+      completedValue: `${rawInput}€/kg`,
+      suffix: "€/kg"
+    };
+  }
+  return null;
+}
+
+function renderPriceInlineSuggestion() {
+  if (!elements.priceInput || !elements.priceInlineSuggestion || !elements.priceInlineMeasure) {
+    return;
+  }
+
+  const inputValue = String(elements.priceInput.value || "");
+  const suggestion = getPriceSuggestionCandidate(inputValue);
+  state.priceInlineSuggestion = suggestion;
+
+  if (!suggestion) {
+    elements.priceInlineSuggestion.textContent = "";
+    elements.priceInlineSuggestion.classList.add("hidden");
+    if (elements.priceInput.parentElement) {
+      elements.priceInput.parentElement.style.setProperty("--product-suggestion-offset", "0px");
+    }
+    return;
+  }
+
+  const { suffix } = suggestion;
+  elements.priceInlineMeasure.textContent = inputValue;
+  const inputStyles = window.getComputedStyle(elements.priceInput);
+  elements.priceInlineMeasure.style.font = inputStyles.font;
+  elements.priceInlineMeasure.style.fontSize = inputStyles.fontSize;
+  elements.priceInlineMeasure.style.fontWeight = inputStyles.fontWeight;
+  elements.priceInlineMeasure.style.letterSpacing = inputStyles.letterSpacing;
+
+  const textWidth = elements.priceInlineMeasure.getBoundingClientRect().width;
+  elements.priceInput.parentElement?.style.setProperty("--product-suggestion-offset", `${textWidth}px`);
+  elements.priceInlineSuggestion.textContent = suffix;
+  elements.priceInlineSuggestion.classList.remove("hidden");
+}
+
+function applyPriceInlineSuggestion() {
+  if (!elements.priceInput || !state.priceInlineSuggestion) {
+    return;
+  }
+
+  const nextValue = state.priceInlineSuggestion.completedValue;
+  elements.priceInput.value = nextValue;
+  state.priceInlineSuggestion = null;
+  renderPriceInlineSuggestion();
+  elements.priceInput.focus();
+  elements.priceInput.setSelectionRange(nextValue.length, nextValue.length);
+}
+
 function updateStickyAlphabetMetrics() {
   const stickyTop = 6;
   const tableHeadHeight = elements.tableHead?.getBoundingClientRect().height || 0;
@@ -974,7 +1031,9 @@ function setPriceFormMode(mode, row = null) {
     if (elements.productInput) {
       elements.productInput.value = row.prodotto || "";
     }
-    elements.priceForm.elements.prezzo.value = row.prezzo || "";
+    if (elements.priceInput) {
+      elements.priceInput.value = row.prezzo || "";
+    }
     state.rivenditoreSearchTerm = "";
     state.categorySearchTerm = "";
     setFormRivenditoreSelection(row.retailer_id);
@@ -982,6 +1041,7 @@ function setPriceFormMode(mode, row = null) {
     closeRivenditoreDropdown();
     closeCategoryDropdown();
     renderProductInlineSuggestion();
+    renderPriceInlineSuggestion();
     return;
   }
 
@@ -996,7 +1056,9 @@ function setPriceFormMode(mode, row = null) {
   closeRivenditoreDropdown();
   closeCategoryDropdown();
   state.productInlineSuggestion = null;
+  state.priceInlineSuggestion = null;
   renderProductInlineSuggestion();
+  renderPriceInlineSuggestion();
 }
 
 function closeRivenditoreDropdown() {
@@ -2113,7 +2175,6 @@ async function resolveRivenditoreForSubmit() {
 
   const selectedRivenditoreId = Number(state.formRivenditoreId || elements.rivenditoreHiddenInput.value);
   if (!selectedRivenditoreId) {
-    // Fallback automatico al rivenditore di default se l'utente non ha inserito nulla
     const defaultRiv = getDefaultRivenditore();
     return {
       rivenditoreId: defaultRiv ? Number(defaultRiv.id) : null,
@@ -2778,6 +2839,23 @@ function handlePriceResetFilters() {
   applyFilters();
 }
 
+function handleFormPriceInput() {
+  renderPriceInlineSuggestion();
+}
+
+function handlePriceInputKeydown(event) {
+  if (event.key !== "Tab" || !state.priceInlineSuggestion) {
+    return;
+  }
+
+  event.preventDefault();
+  applyPriceInlineSuggestion();
+}
+
+function handlePriceInlineSuggestionClick() {
+  applyPriceInlineSuggestion();
+}
+
 function handleFormProductInput() {
   state.formSearchTerm = elements.productInput?.value.trim() || "";
   renderProductInlineSuggestion();
@@ -2863,7 +2941,10 @@ function bindEvents() {
   elements.priceResetFiltersButton?.addEventListener("click", handleCancelEdit);
   elements.productInput?.addEventListener("input", handleFormProductInput);
   elements.productInput?.addEventListener("keydown", handleProductInputKeydown);
+  elements.priceInput?.addEventListener("input", handleFormPriceInput);
+  elements.priceInput?.addEventListener("keydown", handlePriceInputKeydown);
   elements.productInlineSuggestion?.addEventListener("click", handleProductInlineSuggestionClick);
+  elements.priceInlineSuggestion?.addEventListener("click", handlePriceInlineSuggestionClick);
   elements.feedback?.addEventListener("click", handleFeedbackClick);
 
   // Rivenditore e Categoria dropdown (nel form)

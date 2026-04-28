@@ -58,12 +58,21 @@
               <p id="owner-status" class="field-help owner-inline-status">Caricamento owner dal database...</p>
             </div>
             <div class="table-toolbar">
+              <div class="retailer-session-tools">
+                <button
+                  id="retailer-session-button"
+                  class="secondary-button retailer-session-button"
+                  type="button"
+                >
+                  Avvia sessione
+                </button>
+                <p id="retailer-session-status" class="field-help hidden"></p>
+              </div>
               <button id="refresh-button" class="icon-button" type="button" aria-label="Aggiorna listino" title="Aggiorna listino">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/>
                 </svg>
               </button>
-              <span id="table-counter" class="pill">0 prodotti</span>
             </div>
           </div>
 
@@ -179,12 +188,22 @@
                 </div>
                   </td>
                   <td data-label="Prezzo">
-                <input form="price-form" name="prezzo" type="text" placeholder="Es. 1€/l">
+                <div class="product-input-shell">
+                  <input id="price-input" class="product-input" form="price-form" name="prezzo" type="text" placeholder="Es. 3.00€/kg" autocomplete="off" required>
+                  <button
+                    id="price-inline-suggestion"
+                    class="product-inline-suggestion hidden"
+                    type="button"
+                    aria-label="Applica suggerimento prezzo"
+                    title="Applica suggerimento prezzo"
+                  ></button>
+                  <span id="price-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
+                </div>
                   </td>
                   <td class="entry-actions-cell" data-label="Azioni">
                 <div class="entry-actions">
                   <div class="entry-button-row">
-                    <button id="price-submit-button" class="primary-button compact-button icon-button" type="submit" form="price-form">+</button>
+                    <button id="price-submit-button" class="primary-button compact-button icon-button" type="submit" form="price-form" aria-label="Salva" title="Salva">+</button>
                     <button id="price-reset-filters-button" class="icon-button icon-button-danger" type="button" aria-label="Annulla" title="Annulla">×</button>
                   </div>
                 </div>

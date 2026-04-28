@@ -34,6 +34,7 @@ export const state = {
   openRowRivenditoreProduct: null,
   filterInputTimeoutId: null,
   productInlineSuggestion: null,
+  priceInlineSuggestion: null,
   renderCache: {
     rowsMarkup: "",
     alphabetMarkup: "",
@@ -60,6 +61,9 @@ export const elements = {
   refreshButton: document.querySelector("#refresh-button"),
   priceForm: document.querySelector("#price-form"),
   productInput: document.querySelector("#product-input"),
+  priceInput: document.querySelector("#price-input"),
+  priceInlineSuggestion: document.querySelector("#price-inline-suggestion"),
+  priceInlineMeasure: document.querySelector("#price-inline-measure"),
   productInlineSuggestion: document.querySelector("#product-inline-suggestion"),
   productInlineMeasure: document.querySelector("#product-inline-measure"),
   priceSubmitButton: document.querySelector("#price-submit-button"),
