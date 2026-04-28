@@ -1817,9 +1817,18 @@ function renderRows() {
                 </button>
               </div>
             </div>
-            <span class="product-name">${escapeHtml(group.product)}</span>
+            <a
+              href="#"
+              class="category-link"
+              data-action="edit-row"
+              data-row-id="${row.id}"
+              title="Modifica ${escapeHtml(group.product)}"
+            >
+              <span class="category-link-text">${escapeHtml(group.product)}</span>
+            </a>
           </div>
         </td>
+        <td data-label="Prezzo">${formatPriceForTable(row.prezzo)}</td>
         <td data-label="Rivenditore">
           <div class="row-rivenditore-cell">
             <a
@@ -1860,7 +1869,6 @@ function renderRows() {
             </a>
           ` : "-"}
         </td>
-        <td data-label="Prezzo">${formatPriceForTable(row.prezzo)}</td>
         <td data-label="Azioni">
           <div class="row-actions">
             <button

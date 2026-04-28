@@ -102,6 +102,12 @@
                       <span class="sort-indicator" aria-hidden="true">↑</span>
                     </button>
                   </th>
+                  <th class="sort-head" data-sort-column="prezzo" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="prezzo" aria-pressed="false">
+                      <span>Prezzo</span>
+                      <span class="sort-indicator" aria-hidden="true">↕</span>
+                    </button>
+                  </th>
                   <th class="sort-head" data-sort-column="rivenditore" aria-sort="none">
                     <button type="button" class="sort-button" data-sort-key="rivenditore" aria-pressed="false">
                       <span>Rivenditore</span>
@@ -114,99 +120,93 @@
                       <span class="sort-indicator" aria-hidden="true">↕</span>
                     </button>
                   </th>
-                  <th class="sort-head" data-sort-column="prezzo" aria-sort="none">
-                    <button type="button" class="sort-button" data-sort-key="prezzo" aria-pressed="false">
-                      <span>Prezzo</span>
-                      <span class="sort-indicator" aria-hidden="true">↕</span>
-                    </button>
-                  </th>
                   <th>Azioni</th>
                 </tr>
               </thead>
               <tbody class="entry-body">
                 <tr id="entry-row" class="entry-row">
                   <td class="entry-selection-cell" aria-hidden="true">
-                <span class="entry-selection-placeholder"></span>
+                    <span class="entry-selection-placeholder"></span>
                   </td>
                   <td data-label="Prodotto">
-                <div class="product-input-shell">
-                  <input id="product-input" class="product-input" form="price-form" name="prodotto" type="search" placeholder="Cerca o aggiungi..." required autocomplete="off">
-                  <button
-                    id="product-inline-suggestion"
-                    class="product-inline-suggestion hidden"
-                    type="button"
-                    aria-label="Completa con suggerimento prodotto"
-                    tabindex="-1"
-                  ></button>
-                  <span id="product-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
-                </div>
-                  </td>
-                  <td data-label="Rivenditore">
-                <div class="rivenditore-picker">
-                  <input id="rivenditore-hidden-input" name="retailer_id" type="hidden" form="price-form">
-                  <div id="rivenditore-dropdown" class="custom-dropdown">
-                    <button
-                      id="rivenditore-dropdown-button"
-                      class="custom-dropdown-trigger"
-                      type="button"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                    >
-                      <span id="rivenditore-dropdown-label">Select</span>
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M7 10l5 5 5-5z"/>
-                      </svg>
-                    </button>
-                    <div id="rivenditore-dropdown-panel" class="custom-dropdown-panel hidden">
-                      <input id="rivenditore-dropdown-search" type="search" placeholder="Cerca o crea rivenditore">
-                      <div id="rivenditore-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Rivenditore disponibili"></div>
+                    <div class="product-input-shell">
+                      <input id="product-input" class="product-input" form="price-form" name="prodotto" type="search" placeholder="Cerca o aggiungi..." required autocomplete="off">
+                      <button
+                        id="product-inline-suggestion"
+                        class="product-inline-suggestion hidden"
+                        type="button"
+                        aria-label="Completa con suggerimento prodotto"
+                        tabindex="-1"
+                      ></button>
+                      <span id="product-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
                     </div>
-                  </div>
-                </div>
-                  </td>
-                  <td data-label="Categoria">
-                <div class="category-picker">
-                  <input id="category-hidden-input" name="categoria" type="hidden" form="price-form">
-                  <div id="category-dropdown" class="custom-dropdown">
-                    <button
-                      id="category-dropdown-button"
-                      class="custom-dropdown-trigger"
-                      type="button"
-                      aria-haspopup="listbox"
-                      aria-expanded="false"
-                    >
-                      <span id="category-dropdown-label">Select</span>
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M7 10l5 5 5-5z"/>
-                      </svg>
-                    </button>
-                    <div id="category-dropdown-panel" class="custom-dropdown-panel hidden">
-                      <input id="category-dropdown-search" type="search" placeholder="Cerca o crea categoria">
-                      <div id="category-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Categorie disponibili"></div>
-                    </div>
-                  </div>
-                </div>
                   </td>
                   <td data-label="Prezzo">
-                <div class="product-input-shell">
-                  <input id="price-input" class="product-input" form="price-form" name="prezzo" type="text" placeholder="Es. 3.00€/kg" autocomplete="off" required>
-                  <button
-                    id="price-inline-suggestion"
-                    class="product-inline-suggestion hidden"
-                    type="button"
-                    aria-label="Applica suggerimento prezzo"
-                    title="Applica suggerimento prezzo"
-                  ></button>
-                  <span id="price-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
-                </div>
+                    <div class="product-input-shell">
+                      <input id="price-input" class="product-input" form="price-form" name="prezzo" type="text" placeholder="Es. 1€/kg" autocomplete="off" required>
+                      <button
+                        id="price-inline-suggestion"
+                        class="product-inline-suggestion hidden"
+                        type="button"
+                        aria-label="Applica suggerimento prezzo"
+                        title="Applica suggerimento prezzo"
+                      ></button>
+                      <span id="price-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
+                    </div>
+                  </td>
+                  <td data-label="Rivenditore">
+                    <div class="rivenditore-picker">
+                      <input id="rivenditore-hidden-input" name="retailer_id" type="hidden" form="price-form">
+                      <div id="rivenditore-dropdown" class="custom-dropdown">
+                        <button
+                          id="rivenditore-dropdown-button"
+                          class="custom-dropdown-trigger"
+                          type="button"
+                          aria-haspopup="listbox"
+                          aria-expanded="false"
+                        >
+                          <span id="rivenditore-dropdown-label">Select</span>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 10l5 5 5-5z"/>
+                          </svg>
+                        </button>
+                        <div id="rivenditore-dropdown-panel" class="custom-dropdown-panel hidden">
+                          <input id="rivenditore-dropdown-search" type="search" placeholder="Cerca o crea rivenditore">
+                          <div id="rivenditore-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Rivenditore disponibili"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td data-label="Categoria">
+                    <div class="category-picker">
+                      <input id="category-hidden-input" name="categoria" type="hidden" form="price-form">
+                      <div id="category-dropdown" class="custom-dropdown">
+                        <button
+                          id="category-dropdown-button"
+                          class="custom-dropdown-trigger"
+                          type="button"
+                          aria-haspopup="listbox"
+                          aria-expanded="false"
+                        >
+                          <span id="category-dropdown-label">Select</span>
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M7 10l5 5 5-5z"/>
+                          </svg>
+                        </button>
+                        <div id="category-dropdown-panel" class="custom-dropdown-panel hidden">
+                          <input id="category-dropdown-search" type="search" placeholder="Cerca o crea categoria">
+                          <div id="category-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Categorie disponibili"></div>
+                        </div>
+                      </div>
+                    </div>
                   </td>
                   <td class="entry-actions-cell" data-label="Azioni">
-                <div class="entry-actions">
-                  <div class="entry-button-row">
-                    <button id="price-submit-button" class="primary-button compact-button icon-button" type="submit" form="price-form" aria-label="Salva" title="Salva">+</button>
-                    <button id="price-reset-filters-button" class="icon-button icon-button-danger" type="button" aria-label="Annulla" title="Annulla">×</button>
-                  </div>
-                </div>
+                    <div class="entry-actions">
+                      <div class="entry-button-row">
+                        <button id="price-submit-button" class="primary-button compact-button icon-button" type="submit" form="price-form" aria-label="Salva" title="Salva">+</button>
+                        <button id="price-reset-filters-button" class="icon-button icon-button-danger" type="button" aria-label="Annulla" title="Annulla">×</button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               </tbody>
