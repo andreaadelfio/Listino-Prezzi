@@ -848,7 +848,6 @@ td[data-label="Prezzo"] {
   display: inline-flex;
   align-items: stretch;
   flex: 0 0 auto;
-  min-width: 3.9rem;
   border: 1px solid rgba(31, 42, 36, 0.12);
   border-radius: 0.75rem;
   background: rgba(255, 250, 244, 0.98);
@@ -856,8 +855,7 @@ td[data-label="Prezzo"] {
 }
 
 .quantity-input {
-  width: 2.45rem;
-  min-width: 2.45rem;
+  width: 1.7em;
   padding: 0.3rem 0.2rem;
   border: 0;
   border-radius: 0;
