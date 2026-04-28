@@ -146,7 +146,7 @@ select {
   color: var(--danger);
 }
 
-.rivenditore-link {
+.Store-link {
   color: var(--accent-deep);
   text-decoration: underline;
   text-underline-offset: 0.1em;
@@ -159,7 +159,7 @@ select {
   width: 100%;
 }
 
-.rivenditore-link:hover {
+.Store-link:hover {
   color: var(--accent);
 }
 
@@ -199,7 +199,7 @@ select {
   gap: 0.4rem;
 }
 
-.rivenditore-picker,
+.Store-picker,
 .category-picker {
   display: grid;
   gap: 0.7rem;
@@ -789,7 +789,7 @@ td[data-label="Prezzo"] {
   text-align: right; /* Fallback */
 }
 
-.row-rivenditore-cell {
+.row-Store-cell {
   position: relative;
   display: flex;
   align-items: center;
@@ -799,14 +799,14 @@ td[data-label="Prezzo"] {
   width: 100%;
 }
 
-.row-rivenditore-cell .icon-button {
+.row-Store-cell .icon-button {
   position: absolute;
   right: 0;
   top: 50%;
   transform: translateY(-50%);
 }
 
-.row-rivenditore-cell .icon-button:hover {
+.row-Store-cell .icon-button:hover {
   transform: translateY(calc(-50% - 1px));
 }
 

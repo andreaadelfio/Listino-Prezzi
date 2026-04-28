@@ -5,7 +5,7 @@ export const QUANTITY_UPDATE_DEBOUNCE_MS = 650;
 export const FILTER_INPUT_DEBOUNCE_MS = 250;
 export const OWNER_CACHE_KEY = "listino-owner-cache";
 export const CHECKED_PRODUCTS_CACHE_KEY = "listino-checked-products-cache";
-export const SORTABLE_COLUMN_KEYS = Object.freeze(["prodotto", "rivenditore", "categoria", "prezzo"]);
+export const SORTABLE_COLUMN_KEYS = Object.freeze(["prodotto", "Store", "categoria", "prezzo"]);
 export const SESSION_URL_PARAM_KEYS = Object.freeze({
   owner: "o",
   sortKey: "sk",

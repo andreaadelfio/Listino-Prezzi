@@ -64,7 +64,7 @@
                   class="secondary-button retailer-session-button"
                   type="button"
                 >
-                  Avvia sessione
+                  Fai spesa?
                 </button>
                 <p id="retailer-session-status" class="field-help hidden"></p>
               </div>
@@ -108,9 +108,9 @@
                       <span class="sort-indicator" aria-hidden="true">↕</span>
                     </button>
                   </th>
-                  <th class="sort-head" data-sort-column="rivenditore" aria-sort="none">
-                    <button type="button" class="sort-button" data-sort-key="rivenditore" aria-pressed="false">
-                      <span>Rivenditore</span>
+                  <th class="sort-head" data-sort-column="Store" aria-sort="none">
+                    <button type="button" class="sort-button" data-sort-key="Store" aria-pressed="false">
+                      <span>Store</span>
                       <span class="sort-indicator" aria-hidden="true">↕</span>
                     </button>
                   </th>
@@ -154,25 +154,25 @@
                       <span id="price-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
                     </div>
                   </td>
-                  <td data-label="Rivenditore">
-                    <div class="rivenditore-picker">
-                      <input id="rivenditore-hidden-input" name="retailer_id" type="hidden" form="price-form">
-                      <div id="rivenditore-dropdown" class="custom-dropdown">
+                  <td data-label="Store">
+                    <div class="Store-picker">
+                      <input id="Store-hidden-input" name="retailer_id" type="hidden" form="price-form">
+                      <div id="Store-dropdown" class="custom-dropdown">
                         <button
-                          id="rivenditore-dropdown-button"
+                          id="Store-dropdown-button"
                           class="custom-dropdown-trigger"
                           type="button"
                           aria-haspopup="listbox"
                           aria-expanded="false"
                         >
-                          <span id="rivenditore-dropdown-label">Select</span>
+                          <span id="Store-dropdown-label">Select</span>
                           <svg viewBox="0 0 24 24" aria-hidden="true">
                             <path d="M7 10l5 5 5-5z"/>
                           </svg>
                         </button>
-                        <div id="rivenditore-dropdown-panel" class="custom-dropdown-panel hidden">
-                          <input id="rivenditore-dropdown-search" type="search" placeholder="Cerca o crea rivenditore">
-                          <div id="rivenditore-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Rivenditore disponibili"></div>
+                        <div id="Store-dropdown-panel" class="custom-dropdown-panel hidden">
+                          <input id="Store-dropdown-search" type="search" placeholder="Cerca o crea Store">
+                          <div id="Store-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Store disponibili"></div>
                         </div>
                       </div>
                     </div>
@@ -262,8 +262,8 @@
       </main>
     </div>
 
-    <div id="row-rivenditore-dropdown-panel" class="custom-dropdown-panel hidden" role="listbox">
-      <div id="row-rivenditore-dropdown-options" class="custom-dropdown-options">
+    <div id="row-Store-dropdown-panel" class="custom-dropdown-panel hidden" role="listbox">
+      <div id="row-Store-dropdown-options" class="custom-dropdown-options">
       </div>
     </div>
 
