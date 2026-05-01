@@ -58,16 +58,22 @@
               <p id="owner-status" class="field-help owner-inline-status">Caricamento owner dal database...</p>
             </div>
             <div class="table-toolbar">
-              <div class="retailer-session-tools">
+              <div id="session-store-dropdown" class="retailer-session-tools custom-dropdown">
                 <button
                   id="retailer-session-button"
                   class="secondary-button retailer-session-button"
                   type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
                 >
                   Fai spesa?
                 </button>
-                <p id="retailer-session-status" class="field-help hidden"></p>
+                <div id="session-store-dropdown-panel" class="custom-dropdown-panel hidden">
+                  <input id="session-store-dropdown-search" type="search" placeholder="Cerca Store">
+                  <div id="session-store-dropdown-options" class="custom-dropdown-options" role="listbox" aria-label="Store disponibili"></div>
+                </div>
               </div>
+              <p id="retailer-session-status" class="field-help hidden"></p>
               <button id="refresh-button" class="icon-button" type="button" aria-label="Aggiorna listino" title="Aggiorna listino">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 12.65-5.65z"/>

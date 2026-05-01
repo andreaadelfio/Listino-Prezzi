@@ -1010,6 +1010,7 @@ function clearCurrentOwner() {
   state.rows = [];
   state.filteredProducts = [];
   state.selectedStoreByProduct = {};
+  state.activeShoppingStoreId = null;
   state.checkedProducts = {};
   state.crossedOutProducts = {};
   setPriceFormMode("create");
@@ -1020,6 +1021,7 @@ function clearCurrentOwner() {
   showTableMessage("Seleziona un owner per caricare il listino.");
   setTableCounterText("owner richiesto");
   setOwnerStatus("Seleziona un owner per caricare il listino.");
+  updateShoppingSessionUI();
   syncUrlState();
 }
 
@@ -1119,7 +1121,7 @@ function renderStoreList() {
       <button
         type="button"
         class="custom-dropdown-option ${isSelected ? "custom-dropdown-option-active" : ""}"
-        data-Store-id="${Store.id}"
+        data-store-id="${Store.id}"
         role="option"
         aria-selected="${isSelected ? "true" : "false"}"
       >
@@ -1239,18 +1241,30 @@ function openRowStoreDropdown(product, anchorElement) {
   closeCategoryDropdown();
 
   state.openRowStoreProduct = product;
+  renderRowStoreOptions(product);
   
   const rect = anchorElement.getBoundingClientRect();
   const panel = elements.rowStoreDropdownPanel;
   
   if (panel) {
-    panel.style.position = "fixed";
-    panel.style.top = `${rect.bottom + window.scrollY + 5}px`;
-    panel.style.left = `${rect.left + window.scrollX}px`;
     panel.classList.remove("hidden");
-  }
+    panel.style.position = "fixed";
 
-  renderRowStoreOptions(product);
+    let top = rect.bottom + 5;
+    let left = rect.left;
+
+    // Previeni l'uscita a destra (viewport width - larghezza pannello - padding)
+    if (left + panel.offsetWidth > window.innerWidth) {
+      left = Math.max(10, window.innerWidth - panel.offsetWidth - 10);
+    }
+    // Previeni l'uscita in basso (se non c'è spazio, apri verso l'alto)
+    if (top + panel.offsetHeight > window.innerHeight) {
+      top = rect.top - panel.offsetHeight - 5;
+    }
+
+    panel.style.top = `${top}px`;
+    panel.style.left = `${left}px`;
+  }
 }
 
 function renderRowStoreOptions(product) {
@@ -2103,6 +2117,7 @@ async function refreshData() {
     await loadProductVocabulary();
     await loadRows();
   } catch (error) {
+    updateShoppingSessionUI();
     showTableMessage(`Errore nel caricamento dati: ${error.message}`);
     showFeedback(`Errore nel caricamento dati: ${error.message}`, "error");
   } finally {
@@ -2176,6 +2191,99 @@ function handleSelectedRowsToggleSize() {
     box.classList.contains("reduced") ? "↑" : "↓";
 }
 
+function updateShoppingSessionUI() {
+  if (!elements.shoppingSessionButton) return;
+
+  if (state.activeShoppingStoreId) {
+    const store = state.Stores.find(s => String(s.id) === String(state.activeShoppingStoreId));
+    elements.shoppingSessionButton.textContent = `${store?.name || "Store"}`;
+    elements.shoppingSessionButton.classList.add("session-active");
+  } else {
+    elements.shoppingSessionButton.textContent = "Fai spesa?";
+    elements.shoppingSessionButton.classList.remove("session-active");
+  }
+}
+
+function closeSessionStoreDropdown() {
+  state.sessionStoreDropdownOpen = false;
+  state.sessionStoreSearchTerm = "";
+  elements.shoppingSessionButton?.setAttribute("aria-expanded", "false");
+  elements.sessionStoreDropdownPanel?.classList.add("hidden");
+}
+
+function openSessionStoreDropdown() {
+  closeOwnerDropdown();
+  closeStoreDropdown();
+  closeCategoryDropdown();
+  state.sessionStoreDropdownOpen = true;
+  elements.shoppingSessionButton?.setAttribute("aria-expanded", "true");
+  elements.sessionStoreDropdownPanel?.classList.remove("hidden");
+  elements.sessionStoreDropdownSearch?.focus();
+  renderSessionStoreList();
+}
+
+function renderSessionStoreList() {
+  if (!elements.sessionStoreDropdownOptions) return;
+  const searchTerm = state.sessionStoreSearchTerm.toLowerCase();
+  elements.sessionStoreDropdownSearch.value = state.sessionStoreSearchTerm;
+  const filteredStores = state.Stores.filter((store) => store.name.toLowerCase().includes(searchTerm));
+
+  if (!filteredStores.length) {
+    elements.sessionStoreDropdownOptions.innerHTML = `<div class="custom-dropdown-empty">Nessun Store trovato.</div>`;
+    return;
+  }
+
+  elements.sessionStoreDropdownOptions.innerHTML = filteredStores.map((store) => {
+    return `
+      <button
+        type="button"
+        class="custom-dropdown-option"
+        data-session-store-id="${store.id}"
+        role="option"
+      >
+        ${escapeHtml(store.name)}
+      </button>
+    `;
+  }).join("");
+}
+
+function handleSessionStoreDropdownSearch(event) {
+  state.sessionStoreSearchTerm = String(event.target.value || "");
+  renderSessionStoreList();
+}
+
+function handleSessionStoreDropdownOptionClick(event) {
+  const target = event.target;
+  const button = target.closest("button[data-session-store-id]");
+  if (!button) return;
+
+  const storeId = button.dataset.sessionStoreId;
+  const store = state.Stores.find(s => String(s.id) === String(storeId));
+  state.activeShoppingStoreId = storeId;
+  closeSessionStoreDropdown();
+  updateShoppingSessionUI();
+  showFeedback(`Lo Store di default è ora ${store.name}`);
+}
+
+function handleShoppingSessionToggle() {
+  if (state.activeShoppingStoreId) {
+    state.activeShoppingStoreId = null;
+    updateShoppingSessionUI();
+    return;
+  }
+
+  if (!state.currentOwner || state.Stores.length === 0) {
+    showFeedback("Carica un owner con almeno uno Store per iniziare la spesa.", "error");
+    return;
+  }
+
+  if (state.sessionStoreDropdownOpen) {
+    closeSessionStoreDropdown();
+  } else {
+    openSessionStoreDropdown();
+  }
+}
+
 async function resolveStoreForSubmit() {
   if (!state.currentOwner) {
     throw new Error("Seleziona prima un owner.");
@@ -2239,6 +2347,21 @@ async function resolveStoreForSubmit() {
 
   const selectedStoreId = Number(state.formStoreId || elements.StoreHiddenInput.value);
   if (!selectedStoreId) {
+    // Priorità 2: Store della sessione di spesa attiva
+    if (state.activeShoppingStoreId) {
+      const sessionStore = state.Stores.find(
+        (item) => String(item.id) === String(state.activeShoppingStoreId)
+      );
+      if (sessionStore) {
+        return {
+          StoreId: Number(sessionStore.id),
+          StoreName: sessionStore.name,
+          created: false
+        };
+      }
+    }
+
+    // Priorità 3: Store di default globale
     const defaultRiv = getDefaultStore();
     return {
       StoreId: defaultRiv ? Number(defaultRiv.id) : null,
@@ -2348,6 +2471,8 @@ async function applyOwnerSelection(owner, options = {}) {
   state.ownerSearchTerm = "";
   cacheOwner(canonicalOwner);
   state.selectedStoreByProduct = {};
+  state.activeShoppingStoreId = null;
+  updateShoppingSessionUI();
   setPriceFormMode("create");
   renderOwnerSelect();
   renderSelectedRowsBox();
@@ -2504,12 +2629,12 @@ function handleStoreDropdownOptionClick(event) {
     return;
   }
 
-  const button = target.closest("button[data-Store-id]");
+  const button = target.closest("button[data-store-id]");
   if (!(button instanceof HTMLButtonElement)) {
     return;
   }
 
-  const StoreId = button.dataset.StoreId;
+  const StoreId = button.dataset.storeId;
   if (!StoreId) {
     return;
   }
@@ -2644,6 +2769,9 @@ function handleDocumentClick(event) {
   if (elements.ownerDropdown && !elements.ownerDropdown.contains(target)) {
     closeOwnerDropdown();
   }
+  if (elements.sessionStoreDropdown && !elements.sessionStoreDropdown.contains(target)) {
+    closeSessionStoreDropdown();
+  }
   if (elements.rowStoreDropdownPanel && !elements.rowStoreDropdownPanel.contains(target) && !target.closest('[data-action="toggle-row-Store-dropdown"]')) {
     closeRowStoreDropdown();
   }
@@ -2654,6 +2782,7 @@ function handleDocumentKeydown(event) {
     closeOwnerDropdown();
     closeStoreDropdown();
     closeCategoryDropdown();
+    closeSessionStoreDropdown();
   }
 }
 
@@ -2989,6 +3118,7 @@ function handleRowsBodyInput(event) {
 function bindEvents() {
   // Eventi globali
   elements.scrollToTopButton?.addEventListener("click", handleScrollToTop);
+  elements.shoppingSessionButton?.addEventListener("click", handleShoppingSessionToggle);
   elements.selectedRowsList?.addEventListener("click", handleSelectedRowClick);
   elements.selectAllCheckbox?.addEventListener("pointerdown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("keydown", rememberSelectAllToggleIntent);
@@ -3020,6 +3150,10 @@ function bindEvents() {
   elements.categoryDropdownSearch.addEventListener("input", handleCategoryDropdownSearch);
   elements.categoryDropdownOptions.addEventListener("click", handleCategoryDropdownOptionClick);
   elements.rowStoreDropdownOptions?.addEventListener("click", handleRowStoreDropdownOptionClick);
+
+  // Sessione di spesa
+  elements.sessionStoreDropdownSearch?.addEventListener("input", handleSessionStoreDropdownSearch);
+  elements.sessionStoreDropdownOptions?.addEventListener("click", handleSessionStoreDropdownOptionClick);
 
   // Tabella
   elements.rowsBody.addEventListener("input", handleRowsBodyInput);
