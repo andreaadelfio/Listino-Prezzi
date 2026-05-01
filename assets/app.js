@@ -2110,9 +2110,65 @@ async function refreshData() {
   }
 }
 
+function initSelectionResizer() {
+  const box = elements.selectedRowsBox;
+  if (!box) return;
+
+  // cerca in document l'elemento di trascinamento del box
+  const resizer = box.querySelector(".selection-resizer");
+  if (!resizer) return;
+
+  let startY, startHeight;
+
+  const handleMove = (e) => {
+    // Supporto sia per MouseEvent che TouchEvent
+    const currentY = e.touches ? e.touches[0].clientY : e.clientY;
+    const deltaY = currentY - startY;
+    
+    // Calcoliamo la nuova altezza (startHeight - deltaY perché trasciniamo verso l'alto per ingrandire)
+    // Aggiungiamo un limite minimo di 120px per evitare che sparisca
+    const newHeight = Math.max(120, startHeight - deltaY);
+    
+    box.style.height = `${newHeight}px`;
+    box.style.maxHeight = "90vh"; // Limite ragionevole rispetto alla viewport
+  };
+
+  const handleEnd = () => {
+    box.classList.remove("is-resizing");
+    document.removeEventListener("mousemove", handleMove);
+    document.removeEventListener("mouseup", handleEnd);
+    document.removeEventListener("touchmove", handleMove);
+    document.removeEventListener("touchend", handleEnd);
+  };
+
+  const handleStart = (e) => {
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+    startHeight = box.offsetHeight;
+    
+    // Durante il resize, rimuoviamo la transizione e la classe 'reduced' 
+    // per evitare che il CSS provi a limitare l'altezza
+    box.style.transition = "none";
+    box.classList.add("is-resizing");
+
+    document.addEventListener("mousemove", handleMove);
+    document.addEventListener("mouseup", handleEnd);
+    // Passive: false è necessario per poter fare preventDefault su touchmove
+    document.addEventListener("touchmove", handleMove, { passive: false });
+    document.addEventListener("touchend", handleEnd);
+  };
+
+  resizer.addEventListener("mousedown", handleStart);
+  resizer.addEventListener("touchstart", handleStart, { passive: false });
+}
+
 function handleSelectedRowsToggleSize() {
   const box = elements.selectedRowsBox;
   if (!box) return;
+
+  // Se l'utente clicca il pulsante toggle, resettiamo le dimensioni manuali
+  // per tornare al comportamento standard gestito dalle classi CSS
+  box.style.height = "";
+  box.style.maxHeight = "";
 
   box.classList.toggle("reduced");
 
@@ -2975,6 +3031,8 @@ function bindEvents() {
   elements.selectedRowsCopyButton?.addEventListener("click", handleSelectedRowsCopy);
   elements.selectedRowsClearButton?.addEventListener("click", handleSelectedRowsClear);
   elements.selectedRowsToggleSize?.addEventListener("click", handleSelectedRowsToggleSize);
+
+  initSelectionResizer();
 
   // Altri eventi generali
   elements.refreshButton.addEventListener("click", refreshData);
