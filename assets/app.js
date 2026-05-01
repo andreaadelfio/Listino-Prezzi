@@ -2262,7 +2262,7 @@ function handleSessionStoreDropdownOptionClick(event) {
   state.activeShoppingStoreId = storeId;
   closeSessionStoreDropdown();
   updateShoppingSessionUI();
-  showFeedback(`Lo Store di default è ora ${store.name}`);
+  showFeedback(`${store.name} è ora lo store di default.`);
 }
 
 function handleShoppingSessionToggle() {

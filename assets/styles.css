@@ -271,6 +271,9 @@ select {
 
 .custom-dropdown-panel input {
   min-height: 2.7rem;
+  width: 100%;
+  /* min-width: 25ch; */
+  field-sizing: content;
 }
 
 .custom-dropdown-options {
@@ -293,6 +296,7 @@ select {
   background: rgba(255, 250, 244, 0.92);
   color: var(--ink);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .category-option-icon {
