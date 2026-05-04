@@ -137,7 +137,7 @@ function showFeedback(message, type = "success") {
   stopFeedbackTimer();
   const timerMarkup = `<span class="feedback-timer" aria-hidden="true"></span>`;
   elements.feedback.innerHTML = `
-    <span class="feedback-content" style="text-align: center; width: 100%; display: flex; justify-content: center; align-items: center;">
+    <span class="feedback-content">
       <span class="feedback-message">${escapeHtml(message)}</span>
       ${timerMarkup}
     </span>
@@ -161,7 +161,7 @@ function showSuccessFeedbackWithProductLink(message, product) {
   stopFeedbackTimer();
   const timerMarkup = `<span class="feedback-timer" aria-hidden="true"></span>`;
   elements.feedback.innerHTML = `
-    <span class="feedback-content" style="text-align: center; width: 100%; display: flex; justify-content: center; align-items: center;">
+    <span class="feedback-content">
       <span class="feedback-message">
         <button
         type="button"
@@ -539,6 +539,56 @@ async function findStoreByOwnerAndName(owner, name) {
   return data || null;
 }
 
+async function createOrReuseStoreByName(storeName) {
+  const normalizedStoreName = String(storeName || "").trim();
+  if (!state.currentOwner) {
+    throw new Error("Seleziona prima un owner.");
+  }
+  if (!normalizedStoreName) {
+    throw new Error("Inserisci un nome Store valido.");
+  }
+
+  const existingStore = findStoreByName(normalizedStoreName);
+  if (existingStore) {
+    return {
+      store: existingStore,
+      created: false
+    };
+  }
+
+  const { data, error } = await state.supabaseClient
+    .from("retailers")
+    .insert([{ name: normalizedStoreName, owner: state.currentOwner }])
+    .select("id, name")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      const duplicatedStore = await findStoreByOwnerAndName(state.currentOwner, normalizedStoreName);
+      if (duplicatedStore) {
+        await loadStores();
+        const refreshedStore = findStoreByName(normalizedStoreName) || duplicatedStore;
+        return {
+          store: refreshedStore,
+          created: false
+        };
+      }
+
+      throw new Error(
+        "Creazione Store fallita: il database ha ancora un vincolo globale su name. Esegui supabase/owner_unique_migration.sql."
+      );
+    }
+
+    throw new Error(`Creazione Store fallita: ${error.message}`);
+  }
+
+  await loadStores();
+  return {
+    store: findStoreByName(data.name) || data,
+    created: true
+  };
+}
+
 function buildCategoryList() {
   if (state.cachedCategories !== null) {
     return state.cachedCategories;
@@ -568,6 +618,139 @@ function getCategoryDisplayName(category) {
   }
 
   return categoryIcon ? `${categoryIcon} ${categoryName}` : categoryName;
+}
+
+function normalizeAssociationProduct(value) {
+  return normalizeAlphabetSource(value)
+    .toLocaleLowerCase("it")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function tokenizeAssociationProduct(value) {
+  return normalizeAssociationProduct(value)
+    .split(/\s+/)
+    .filter((token) => token.length >= 3);
+}
+
+function getSuggestedCategoryForProduct(productValue) {
+  const normalizedInput = normalizeAssociationProduct(productValue);
+  if (!normalizedInput || normalizedInput.length < 3) {
+    return null;
+  }
+
+  const inputTokens = tokenizeAssociationProduct(productValue);
+  if (!inputTokens.length) {
+    return null;
+  }
+
+  const categoryScores = new Map();
+
+  state.rows.forEach((row) => {
+    const categoryName = String(row?.categoria || "").trim();
+    const historicalProduct = String(row?.prodotto || "").trim();
+    if (!categoryName || !historicalProduct) {
+      return;
+    }
+
+    const normalizedHistoricalProduct = normalizeAssociationProduct(historicalProduct);
+    if (!normalizedHistoricalProduct) {
+      return;
+    }
+
+    let score = 0;
+    if (normalizedHistoricalProduct === normalizedInput) {
+      score += 120;
+    } else {
+      if (
+        normalizedHistoricalProduct.startsWith(normalizedInput) ||
+        normalizedInput.startsWith(normalizedHistoricalProduct)
+      ) {
+        score += 55;
+      } else if (
+        normalizedHistoricalProduct.includes(normalizedInput) ||
+        normalizedInput.includes(normalizedHistoricalProduct)
+      ) {
+        score += 35;
+      }
+
+      const historicalTokens = tokenizeAssociationProduct(historicalProduct);
+      const overlapCount = inputTokens.filter((token) => historicalTokens.includes(token)).length;
+      if (overlapCount > 0) {
+        score += overlapCount * 18;
+      }
+    }
+
+    if (score <= 0) {
+      return;
+    }
+
+    const currentEntry = categoryScores.get(categoryName) || {
+      value: categoryName,
+      score: 0,
+      matches: 0
+    };
+
+    currentEntry.score += score;
+    currentEntry.matches += 1;
+    categoryScores.set(categoryName, currentEntry);
+  });
+
+  const rankedSuggestions = [...categoryScores.values()]
+    .sort((suggestionA, suggestionB) =>
+      suggestionB.score - suggestionA.score
+      || suggestionB.matches - suggestionA.matches
+      || suggestionA.value.localeCompare(suggestionB.value, "it")
+    );
+
+  const bestSuggestion = rankedSuggestions[0];
+  const secondSuggestion = rankedSuggestions[1];
+  if (!bestSuggestion || bestSuggestion.score < 35) {
+    return null;
+  }
+
+  if (secondSuggestion && bestSuggestion.score - secondSuggestion.score < 12) {
+    return null;
+  }
+
+  return bestSuggestion;
+}
+
+function syncSuggestedCategoryFromProduct() {
+  const suggestedCategory = getSuggestedCategoryForProduct(elements.productInput?.value || "");
+  state.suggestedCategoryValue = suggestedCategory?.value || "";
+
+  const canApplySuggestion = state.categorySelectionSource !== "manual"
+    && !state.editingRowId
+    && !String(state.categorySearchTerm || "").trim();
+
+  if (!canApplySuggestion) {
+    renderCategoryList();
+    return;
+  }
+
+  if (!suggestedCategory) {
+    if (state.categorySelectionSource === "suggested") {
+      setFormCategorySelection("", { source: "none", shouldApplyFilters: false });
+      return;
+    }
+
+    renderCategoryList();
+    return;
+  }
+
+  if (
+    state.formCategoryValue === suggestedCategory.value
+    && state.categorySelectionSource === "suggested"
+  ) {
+    renderCategoryList();
+    return;
+  }
+
+  setFormCategorySelection(suggestedCategory.value, {
+    source: "suggested",
+    shouldApplyFilters: false
+  });
 }
 
 function syncCheckedProducts() {
@@ -785,9 +968,60 @@ function applyProductInlineSuggestion() {
   state.formSearchTerm = nextValue;
   state.productInlineSuggestion = null;
   renderProductInlineSuggestion();
+  syncSuggestedCategoryFromProduct();
   applyFilters();
   elements.productInput.focus();
   elements.productInput.setSelectionRange(nextValue.length, nextValue.length);
+}
+
+function normalizePriceFilterText(value) {
+  return String(value || "")
+    .replace(/\u00A0/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function matchesPriceFilter(priceText, filterText) {
+  const normalizedFilter = normalizePriceFilterText(filterText);
+  if (!normalizedFilter) {
+    return true;
+  }
+
+  const rangeMatch = normalizedFilter.match(/^(\d+(?:[.,]\d+)?)\s*-\s*(\d+(?:[.,]\d+)?)$/);
+  if (rangeMatch) {
+    const minValue = Number(rangeMatch[1].replace(",", "."));
+    const maxValue = Number(rangeMatch[2].replace(",", "."));
+    const parsedPrice = parsePriceText(priceText);
+    if (!Number.isFinite(parsedPrice.value)) {
+      return false;
+    }
+    return parsedPrice.value >= Math.min(minValue, maxValue) && parsedPrice.value <= Math.max(minValue, maxValue);
+  }
+
+  const comparisonMatch = normalizedFilter.match(/^(<=|>=|<|>)\s*(\d+(?:[.,]\d+)?)$/);
+  if (comparisonMatch) {
+    const [, operator, rawValue] = comparisonMatch;
+    const targetValue = Number(rawValue.replace(",", "."));
+    const parsedPrice = parsePriceText(priceText);
+    if (!Number.isFinite(parsedPrice.value)) {
+      return false;
+    }
+
+    switch (operator) {
+      case "<":
+        return parsedPrice.value < targetValue;
+      case "<=":
+        return parsedPrice.value <= targetValue;
+      case ">":
+        return parsedPrice.value > targetValue;
+      case ">=":
+        return parsedPrice.value >= targetValue;
+      default:
+        return false;
+    }
+  }
+
+  return normalizePriceFilterText(priceText).includes(normalizedFilter);
 }
 
 function getPriceSuggestionCandidate(inputValue) {
@@ -843,6 +1077,9 @@ function applyPriceInlineSuggestion() {
   elements.priceInput.value = nextValue;
   state.priceInlineSuggestion = null;
   renderPriceInlineSuggestion();
+  if (!state.editingRowId) {
+    applyFilters();
+  }
   elements.priceInput.focus();
   elements.priceInput.setSelectionRange(nextValue.length, nextValue.length);
 }
@@ -1028,6 +1265,8 @@ function clearCurrentOwner() {
 function setPriceFormMode(mode, row = null) {
   if (mode === "edit" && row) {
     state.editingRowId = row.id;
+    state.categorySelectionSource = "manual";
+    state.suggestedCategoryValue = "";
     elements.entryRow?.classList.add("entry-row-editing");
 
     if (elements.productInput) {
@@ -1039,7 +1278,7 @@ function setPriceFormMode(mode, row = null) {
     state.StoreSearchTerm = "";
     state.categorySearchTerm = "";
     setFormStoreSelection(row.retailer_id);
-    setFormCategorySelection(row.categoria || "");
+    setFormCategorySelection(row.categoria || "", { source: "manual" });
     closeStoreDropdown();
     closeCategoryDropdown();
     renderProductInlineSuggestion();
@@ -1051,9 +1290,11 @@ function setPriceFormMode(mode, row = null) {
   elements.priceForm.reset();
   state.StoreSearchTerm = "";
   state.categorySearchTerm = "";
+  state.categorySelectionSource = "none";
+  state.suggestedCategoryValue = "";
   elements.entryRow?.classList.remove("entry-row-editing");
   setFormStoreSelection("");
-  setFormCategorySelection("");
+  setFormCategorySelection("", { source: "none" });
   state.formSearchTerm = "";
   closeStoreDropdown();
   closeCategoryDropdown();
@@ -1184,6 +1425,12 @@ function renderCategoryList() {
   const filteredCategories = categories.filter((category) =>
     String(category?.name || "").toLowerCase().includes(searchTerm)
   );
+  const suggestionValue = String(state.suggestedCategoryValue || "").trim();
+  const showSuggestionHint = Boolean(
+    suggestionValue
+    && !searchTerm
+    && state.categorySelectionSource !== "manual"
+  );
 
   if (!filteredCategories.length) {
     if (state.categorySearchTerm) {
@@ -1200,10 +1447,15 @@ function renderCategoryList() {
     return;
   }
 
-  elements.categoryDropdownOptions.innerHTML = filteredCategories.map((category) => {
+  const suggestionMarkup = showSuggestionHint
+    ? `<div class="custom-dropdown-hint">Suggerita dallo storico: ${escapeHtml(suggestionValue)}</div>`
+    : "";
+
+  elements.categoryDropdownOptions.innerHTML = `${suggestionMarkup}${filteredCategories.map((category) => {
     const categoryName = String(category?.name || "").trim();
     const categoryIcon = String(category?.icon || "").trim();
     const isSelected = categoryName === state.formCategoryValue;
+    const isSuggested = categoryName === suggestionValue;
     return `
       <button
         type="button"
@@ -1214,20 +1466,28 @@ function renderCategoryList() {
       >
         ${categoryIcon ? `<span class="category-option-icon" aria-hidden="true">${escapeHtml(categoryIcon)}</span>` : ""}
         <span>${escapeHtml(categoryName)}</span>
+        ${isSuggested ? `<span class="category-option-badge">Suggerita</span>` : ""}
       </button>
     `;
-  }).join("");
+  }).join("")}`;
 
   updateCategoryDropdownLabel();
   elements.categoryHiddenInput.value = state.formCategoryValue;
 }
 
-function setFormCategorySelection(categoryValue) {
+function setFormCategorySelection(categoryValue, options = {}) {
+  const {
+    source = "manual",
+    shouldApplyFilters = true
+  } = options;
   const normalizedValue = String(categoryValue || "").trim();
   state.formCategoryValue = normalizedValue;
+  state.categorySelectionSource = normalizedValue ? source : "none";
   elements.categoryHiddenInput.value = normalizedValue;
   renderCategoryList();
-  applyFilters();
+  if (shouldApplyFilters) {
+    applyFilters();
+  }
 }
 
 function closeRowStoreDropdown() {
@@ -1712,7 +1972,12 @@ function applyFilters(options = {}) {
   const { syncUrl = true } = options;
   const search = state.formSearchTerm.toLowerCase();
   const StoreId = state.formStoreId;
-  const category = state.formCategoryValue;
+  const category = state.categorySelectionSource === "manual"
+    ? state.formCategoryValue
+    : "";
+  const priceFilter = state.editingRowId
+    ? ""
+    : String(elements.priceInput?.value || "").trim();
 
   const groupedProducts = getCurrentProductGroups();
   const filteredGroups = groupedProducts.filter((group) => {
@@ -1732,6 +1997,7 @@ function applyFilters(options = {}) {
     if (search && !haystack.includes(search)) return false;
     if (StoreId && !group.rows.some((row) => String(row.retailer_id) === StoreId)) return false;
     if (category && !group.rows.some((row) => row.categoria === category)) return false;
+    if (priceFilter && !matchesPriceFilter(group.selectedRow?.prezzo, priceFilter)) return false;
     return true;
   });
   state.filteredProducts = sortProductGroups(filteredGroups);
@@ -2224,16 +2490,14 @@ function openSessionStoreDropdown() {
 
 function renderSessionStoreList() {
   if (!elements.sessionStoreDropdownOptions) return;
-  const searchTerm = state.sessionStoreSearchTerm.toLowerCase();
+  const rawSearchTerm = String(state.sessionStoreSearchTerm || "");
+  const trimmedSearchTerm = rawSearchTerm.trim();
+  const searchTerm = rawSearchTerm.toLowerCase();
+  const exactStore = findStoreByName(trimmedSearchTerm);
   elements.sessionStoreDropdownSearch.value = state.sessionStoreSearchTerm;
   const filteredStores = state.Stores.filter((store) => store.name.toLowerCase().includes(searchTerm));
 
-  if (!filteredStores.length) {
-    elements.sessionStoreDropdownOptions.innerHTML = `<div class="custom-dropdown-empty">Nessun Store trovato.</div>`;
-    return;
-  }
-
-  elements.sessionStoreDropdownOptions.innerHTML = filteredStores.map((store) => {
+  const options = filteredStores.map((store) => {
     return `
       <button
         type="button"
@@ -2244,7 +2508,25 @@ function renderSessionStoreList() {
         ${escapeHtml(store.name)}
       </button>
     `;
-  }).join("");
+  });
+
+  if (trimmedSearchTerm && !exactStore) {
+    options.unshift(`
+      <button
+        type="button"
+        class="custom-dropdown-option"
+        data-session-store-new="true"
+        data-session-store-name="${escapeHtml(trimmedSearchTerm)}"
+        role="option"
+      >
+        Usa nuovo Store: ${escapeHtml(trimmedSearchTerm)}
+      </button>
+    `);
+  }
+
+  elements.sessionStoreDropdownOptions.innerHTML = options.length
+    ? options.join("")
+    : `<div class="custom-dropdown-empty">Nessun Store trovato.</div>`;
 }
 
 function handleSessionStoreDropdownSearch(event) {
@@ -2252,17 +2534,83 @@ function handleSessionStoreDropdownSearch(event) {
   renderSessionStoreList();
 }
 
-function handleSessionStoreDropdownOptionClick(event) {
-  const target = event.target;
-  const button = target.closest("button[data-session-store-id]");
-  if (!button) return;
+function activateShoppingSessionStore(store, options = {}) {
+  const { created = false } = options;
+  if (!store) {
+    return;
+  }
 
-  const storeId = button.dataset.sessionStoreId;
-  const store = state.Stores.find(s => String(s.id) === String(storeId));
-  state.activeShoppingStoreId = storeId;
+  state.activeShoppingStoreId = String(store.id);
   closeSessionStoreDropdown();
   updateShoppingSessionUI();
-  showFeedback(`${store.name} è ora lo store di default.`);
+  showFeedback(
+    created
+      ? `Store "${store.name}" creato e impostato per la spesa.`
+      : `${store.name} è ora lo store di default.`
+  );
+}
+
+async function createSessionStore(storeName) {
+  showLoadingOverlay("Creazione Store...");
+  try {
+    const { store, created } = await createOrReuseStoreByName(storeName);
+    activateShoppingSessionStore(store, { created });
+  } catch (error) {
+    showFeedback(error.message, "error");
+  } finally {
+    hideLoadingOverlay();
+  }
+}
+
+function handleSessionStoreDropdownOptionClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const newStoreButton = target.closest("button[data-session-store-new]");
+  if (newStoreButton instanceof HTMLButtonElement) {
+    const storeName = String(newStoreButton.dataset.sessionStoreName || "").trim();
+    if (!storeName) {
+      return;
+    }
+
+    createSessionStore(storeName);
+    return;
+  }
+
+  const button = target.closest("button[data-session-store-id]");
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const storeId = button.dataset.sessionStoreId;
+  const store = state.Stores.find((item) => String(item.id) === String(storeId));
+  if (!store) {
+    return;
+  }
+
+  activateShoppingSessionStore(store);
+}
+
+function handleSessionStoreDropdownSearchKeydown(event) {
+  if (event.key !== "Enter") {
+    return;
+  }
+
+  event.preventDefault();
+  const typedStore = String(event.currentTarget.value || "").trim();
+  if (!typedStore) {
+    return;
+  }
+
+  const exactStore = findStoreByName(typedStore);
+  if (exactStore) {
+    activateShoppingSessionStore(exactStore);
+    return;
+  }
+
+  createSessionStore(typedStore);
 }
 
 function handleShoppingSessionToggle() {
@@ -2272,8 +2620,8 @@ function handleShoppingSessionToggle() {
     return;
   }
 
-  if (!state.currentOwner || state.Stores.length === 0) {
-    showFeedback("Carica un owner con almeno uno Store per iniziare la spesa.", "error");
+  if (!state.currentOwner) {
+    showFeedback("Carica prima un owner per iniziare la spesa.", "error");
     return;
   }
 
@@ -2291,57 +2639,18 @@ async function resolveStoreForSubmit() {
 
   const newStoreName = String(state.StoreSearchTerm || "").trim();
   if (newStoreName) {
-    const existingStore = findStoreByName(newStoreName);
-    if (existingStore) {
-      state.StoreSearchTerm = "";
-      setFormStoreSelection(existingStore.id);
-      return {
-        StoreId: Number(existingStore.id),
-        StoreName: existingStore.name,
-        created: false
-      };
-    }
-
     const hasPartialStores = state.Stores.some((Store) => Store.name.toLowerCase().includes(newStoreName.toLowerCase()));
     if (hasPartialStores) {
       throw new Error("Seleziona un Store dalla lista oppure continua a digitare fino a non trovare risultati.");
     }
 
-    const { data, error } = await state.supabaseClient
-      .from("retailers")
-      .insert([{ name: newStoreName, owner: state.currentOwner }])
-      .select("id, name")
-      .single();
-
-    if (error) {
-      if (error.code === "23505") {
-        const existingStore = await findStoreByOwnerAndName(state.currentOwner, newStoreName);
-        if (existingStore) {
-          await loadStores();
-          state.StoreSearchTerm = "";
-          setFormStoreSelection(existingStore.id);
-          return {
-            StoreId: Number(existingStore.id),
-            StoreName: existingStore.name,
-            created: false
-          };
-        }
-
-        throw new Error(
-          "Creazione Store fallita: il database ha ancora un vincolo globale su name. Esegui supabase/owner_unique_migration.sql."
-        );
-      }
-
-      throw new Error(`Creazione Store fallita: ${error.message}`);
-    }
-
-    await loadStores();
+    const { store, created } = await createOrReuseStoreByName(newStoreName);
     state.StoreSearchTerm = "";
-    setFormStoreSelection(data.id);
+    setFormStoreSelection(store.id);
     return {
-      StoreId: Number(data.id),
-      StoreName: data.name,
-      created: true
+      StoreId: Number(store.id),
+      StoreName: store.name,
+      created
     };
   }
 
@@ -2593,16 +2902,8 @@ async function handlePriceSubmit(event) {
 
 function handleCancelEdit() {
   clearFeedback();
-  // Reset del form di inserimento
-  elements.priceForm.reset();
-  state.formStoreId = "";
-  state.formCategoryValue = "";
-  state.formSearchTerm = "";
-
-  renderStoreList();
-  renderCategoryList();
-  applyFilters();
   setPriceFormMode("create");
+  applyFilters();
 }
 
 function handleStoreDropdownToggle() {
@@ -2658,6 +2959,7 @@ function handleCategoryDropdownSearch(event) {
   state.categorySearchTerm = String(event.target.value || "");
   if (state.categorySearchTerm.trim()) {
     state.formCategoryValue = "";
+    state.categorySelectionSource = "manual";
     elements.categoryHiddenInput.value = "";
   }
   renderCategoryList();
@@ -2677,7 +2979,7 @@ function handleCategoryDropdownOptionClick(event) {
   const categoryValue = button.dataset.categoryValue || "";
   state.categorySearchTerm = "";
   elements.categoryDropdownSearch.value = "";
-  setFormCategorySelection(categoryValue);
+  setFormCategorySelection(categoryValue, { source: "manual" });
   closeCategoryDropdown();
 }
 
@@ -3019,21 +3321,32 @@ function handleSortButtonClick(event) {
 }
 
 function handlePriceResetFilters() {
+  if (state.editingRowId) {
+    handleCancelEdit();
+    return;
+  }
+
   // Reset solo del form di inserimento
   elements.priceForm.reset();
   state.formStoreId = "";
   state.formCategoryValue = "";
   state.formSearchTerm = "";
   state.productInlineSuggestion = null;
+  state.categorySelectionSource = "none";
+  state.suggestedCategoryValue = "";
 
   renderStoreList();
   renderCategoryList();
   renderProductInlineSuggestion();
+  renderPriceInlineSuggestion();
   applyFilters();
 }
 
 function handleFormPriceInput() {
   renderPriceInlineSuggestion();
+  if (!state.editingRowId) {
+    applyFilters();
+  }
 }
 
 function handlePriceInputKeydown(event) {
@@ -3052,6 +3365,7 @@ function handlePriceInlineSuggestionClick() {
 function handleFormProductInput() {
   state.formSearchTerm = elements.productInput?.value.trim() || "";
   renderProductInlineSuggestion();
+  syncSuggestedCategoryFromProduct();
   if (state.filterInputTimeoutId !== null) {
     window.clearTimeout(state.filterInputTimeoutId);
   }
@@ -3132,7 +3446,7 @@ function bindEvents() {
 
   // Form inserimento/modifica
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
-  elements.priceResetFiltersButton?.addEventListener("click", handleCancelEdit);
+  elements.priceResetFiltersButton?.addEventListener("click", handlePriceResetFilters);
   elements.productInput?.addEventListener("input", handleFormProductInput);
   elements.productInput?.addEventListener("keydown", handleProductInputKeydown);
   elements.priceInput?.addEventListener("input", handleFormPriceInput);
@@ -3153,6 +3467,7 @@ function bindEvents() {
 
   // Sessione di spesa
   elements.sessionStoreDropdownSearch?.addEventListener("input", handleSessionStoreDropdownSearch);
+  elements.sessionStoreDropdownSearch?.addEventListener("keydown", handleSessionStoreDropdownSearchKeydown);
   elements.sessionStoreDropdownOptions?.addEventListener("click", handleSessionStoreDropdownOptionClick);
 
   // Tabella

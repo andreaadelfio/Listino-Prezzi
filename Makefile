@@ -12,7 +12,13 @@ git:
 dev:
 	@echo "Avvio server su http://$(HOST):$(PORT)/index.html"
 	python3 -m http.server "$(PORT)" --bind "$(HOST)" --directory "$(SITE_DIR)" >/dev/null 2>&1 &
-	open "http://$(HOST):$(PORT)"
+	@if command -v xdg-open >/dev/null 2>&1; then \
+		xdg-open "http://$(HOST):$(PORT)/index.html" >/dev/null 2>&1; \
+	elif command -v open >/dev/null 2>&1; then \
+		open "http://$(HOST):$(PORT)/index.html"; \
+	else \
+		echo "Apri manualmente: http://$(HOST):$(PORT)/index.html"; \
+	fi
 
 stop:
 	@if pkill -f "python3 -m http.server $(PORT)" 2>/dev/null; then \

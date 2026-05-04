@@ -19,6 +19,8 @@ export const state = {
   StoreDropdownOpen: false,
   StoreSearchTerm: "",
   formCategoryValue: "",
+  categorySelectionSource: "none",
+  suggestedCategoryValue: "",
   categoryDropdownOpen: false,
   categorySearchTerm: "",
   urlSyncPaused: false,

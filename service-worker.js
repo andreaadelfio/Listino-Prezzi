@@ -1,4 +1,4 @@
-const CACHE_NAME = "listino-prezzi-shell-v2";
+const CACHE_NAME = "listino-prezzi-shell-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -6,7 +6,11 @@ const APP_SHELL = [
   "./assets/styles.css",
   "./assets/app.js",
   "./assets/config.js",
-  "./assets/cart-icon.svg"
+  "./assets/cart-icon.svg",
+  "./assets/app/constants.js",
+  "./assets/app/groups.js",
+  "./assets/app/store.js",
+  "./assets/app/utils.js"
 ];
 
 self.addEventListener("install", (event) => {
