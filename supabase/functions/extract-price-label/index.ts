@@ -126,12 +126,7 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: "Metodo non supportato." }, { status: 405 });
   }
 
-  const openAiApiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!openAiApiKey) {
-    return jsonResponse({ error: "OPENAI_API_KEY non configurata nei secret Supabase." }, { status: 500 });
-  }
-
-  const model = Deno.env.get("LABEL_EXTRACTION_MODEL") || "gpt-5-mini";
+  // Usiamo OCR_SPACE_API_KEY per l'elaborazione OCR; non richiediamo piu' OPENAI_API_KEY.
 
   try {
     const formData = await request.formData();
@@ -162,19 +157,40 @@ Deno.serve(async (request) => {
     form.append("isOverlayRequired", "false");
     form.append("file", new Blob([imageBytes], { type: image.type }), "image.jpg");
 
-    const ocrResponse = await fetch("https://api.ocr.space/parse/image", {
-      method: "POST",
-      body: form
-    });
+    console.log("[extract-price-label] Invio richiesta OCR.space", { size: imageBytes.length });
+
+    const ocrController = new AbortController();
+    const ocrTimeoutMs = 25000; // timeout per OCR.space (25s)
+    const ocrTimeout = setTimeout(() => ocrController.abort(), ocrTimeoutMs);
+
+    let ocrResponse: Response;
+    try {
+      ocrResponse = await fetch("https://api.ocr.space/parse/image", {
+        method: "POST",
+        body: form,
+        signal: ocrController.signal
+      });
+    } catch (err) {
+      clearTimeout(ocrTimeout);
+      console.log("[extract-price-label] Errore fetch OCR.space", { err: String(err) });
+      if (err && (err as Error).name === 'AbortError') {
+        return jsonResponse({ error: "Timeout richiesta OCR (25s)." }, { status: 504 });
+      }
+      return jsonResponse({ error: "Errore nella richiesta OCR." }, { status: 502 });
+    }
+
+    clearTimeout(ocrTimeout);
 
     let ocrPayload: any = null;
     try {
       ocrPayload = await ocrResponse.json();
-    } catch {
+    } catch (parseErr) {
+      console.log("[extract-price-label] Impossibile parseare risposta OCR", { parseErr: String(parseErr) });
       ocrPayload = null;
     }
 
     if (!ocrResponse.ok || !ocrPayload) {
+      console.log("[extract-price-label] OCR.space risponde con errore", { status: ocrResponse.status, payload: ocrPayload });
       return jsonResponse({ error: "Errore OCR esterno." }, { status: 502 });
     }
 

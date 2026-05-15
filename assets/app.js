@@ -240,6 +240,80 @@ function getLabelAiMaxFileSizeBytes() {
   return Math.round(normalizedMb * 1024 * 1024);
 }
 
+const OCR_SPACE_MAX_UPLOAD_BYTES = Math.round(1.45 * 1024 * 1024); // 1.45 MB per sicurezza
+
+function imageFileToBlob(file, type, quality) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob((blob) => resolve(blob), type, quality);
+    };
+    img.onerror = () => resolve(null);
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+async function compressImageFile(file, maxBytes) {
+  if (!file || file.size <= maxBytes || !String(file.type || "").startsWith("image/")) {
+    return file;
+  }
+
+  const targetType = "image/jpeg";
+  let quality = 0.92;
+  let blob = await imageFileToBlob(file, targetType, quality);
+
+  if (blob && blob.size <= maxBytes) {
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: targetType });
+  }
+
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = URL.createObjectURL(file);
+  });
+
+  const originalWidth = img.naturalWidth;
+  const originalHeight = img.naturalHeight;
+  let width = originalWidth;
+  let height = originalHeight;
+
+  while (blob && blob.size > maxBytes && quality >= 0.45 && width > 100 && height > 100) {
+    const scale = Math.sqrt(maxBytes / blob.size);
+    width = Math.max(100, Math.round(width * scale));
+    height = Math.max(100, Math.round(height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      break;
+    }
+    ctx.drawImage(img, 0, 0, width, height);
+    quality = Math.max(0.45, quality - 0.1);
+    blob = await new Promise((resolve) => canvas.toBlob((b) => resolve(b), targetType, quality));
+    if (!blob) {
+      break;
+    }
+  }
+
+  if (blob && blob.size <= maxBytes) {
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: targetType });
+  }
+
+  return null;
+}
+
 function getLabelAiHeaders(endpoint) {
   const headers = {
     Accept: "application/json"
@@ -615,8 +689,13 @@ async function requestLabelExtraction(file) {
     throw new Error("Endpoint AI non configurato.");
   }
 
+  const uploadFile = await compressImageFile(file, OCR_SPACE_MAX_UPLOAD_BYTES);
+  if (!uploadFile) {
+    throw new Error("Immagine troppo grande per l'elaborazione OCR; usa una foto più leggera.");
+  }
+
   const formData = new FormData();
-  formData.append("image", file, file.name || "label-image");
+  formData.append("image", uploadFile, uploadFile.name || "label-image");
   formData.append("owner", state.currentOwner || "");
   formData.append("stores_json", JSON.stringify(
     state.Stores
@@ -631,11 +710,26 @@ async function requestLabelExtraction(file) {
       .slice(0, 200)
   ));
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: getLabelAiHeaders(endpoint),
-    body: formData
-  });
+  const controller = new AbortController();
+  const timeoutMs = 30000; // 30s timeout
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: getLabelAiHeaders(endpoint),
+      body: formData,
+      signal: controller.signal
+    });
+  } catch (err) {
+    window.clearTimeout(timeoutId);
+    if (err && err.name === 'AbortError') {
+      throw new Error('Timeout nella richiesta di analisi etichetta. Riprova.');
+    }
+    throw err;
+  }
+  window.clearTimeout(timeoutId);
 
   let payload = null;
   try {
