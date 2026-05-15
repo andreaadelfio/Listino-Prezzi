@@ -188,6 +188,99 @@ function clearFeedback() {
   elements.feedback.className = "feedback feedback-inline hidden";
 }
 
+function setLabelPhotoStatus(message, type = "neutral") {
+  if (!elements.labelPhotoStatus) {
+    return;
+  }
+
+  const normalizedMessage = String(message || "").trim();
+  state.lastLabelPhotoSummary = normalizedMessage;
+  state.lastLabelPhotoStatusType = type;
+
+  if (!normalizedMessage) {
+    elements.labelPhotoStatus.textContent = "";
+    elements.labelPhotoStatus.className = "field-help entry-meta hidden";
+    return;
+  }
+
+  elements.labelPhotoStatus.textContent = normalizedMessage;
+  elements.labelPhotoStatus.className = `field-help entry-meta entry-meta-${type}`;
+}
+
+function clearLabelPhotoStatus() {
+  setLabelPhotoStatus("", "neutral");
+}
+
+function setLabelPhotoBusy(isBusy) {
+  state.labelPhotoBusy = Boolean(isBusy);
+  if (elements.labelPhotoButton) {
+    elements.labelPhotoButton.disabled = state.labelPhotoBusy;
+    elements.labelPhotoButton.setAttribute("aria-busy", state.labelPhotoBusy ? "true" : "false");
+  }
+  if (elements.labelPhotoInput) {
+    elements.labelPhotoInput.disabled = state.labelPhotoBusy;
+  }
+}
+
+function getLabelAiEndpoint() {
+  const configuredEndpoint = String(window.APP_CONFIG?.labelAiEndpoint || "").trim();
+  if (configuredEndpoint) {
+    return configuredEndpoint;
+  }
+
+  const supabaseUrl = String(window.APP_CONFIG?.supabaseUrl || "").trim();
+  return supabaseUrl ? `${supabaseUrl}/functions/v1/extract-price-label` : "";
+}
+
+function getLabelAiMaxFileSizeBytes() {
+  const maxFileSizeMb = Number(window.APP_CONFIG?.labelAiMaxFileSizeMb || 8);
+  const normalizedMb = Number.isFinite(maxFileSizeMb) && maxFileSizeMb > 0
+    ? maxFileSizeMb
+    : 8;
+  return Math.round(normalizedMb * 1024 * 1024);
+}
+
+function getLabelAiHeaders(endpoint) {
+  const headers = {
+    Accept: "application/json"
+  };
+  const supabaseKey = String(window.APP_CONFIG?.supabaseKey || "").trim();
+
+  if (supabaseKey && endpoint.includes("/functions/v1/")) {
+    headers.apikey = supabaseKey;
+    headers.Authorization = `Bearer ${supabaseKey}`;
+  }
+
+  return headers;
+}
+
+function buildLabelPhotoSummary(extraction) {
+  const summaryParts = [
+    String(extraction?.product || "").trim(),
+    String(extraction?.price || "").trim(),
+    String(extraction?.storeName || "").trim(),
+    String(extraction?.categoryName || "").trim()
+  ].filter(Boolean);
+
+  const confidence = Number(extraction?.confidence);
+  const confidenceSuffix = Number.isFinite(confidence)
+    ? ` (${Math.round(Math.min(Math.max(confidence, 0), 1) * 100)}%)`
+    : "";
+
+  return summaryParts.length
+    ? `Foto letta${confidenceSuffix}: ${summaryParts.join(" · ")}`
+    : "Foto letta, ma con pochi dettagli utili.";
+}
+
+function hasUsefulLabelExtraction(extraction) {
+  return Boolean(
+    String(extraction?.product || "").trim()
+    || String(extraction?.price || "").trim()
+    || String(extraction?.storeName || "").trim()
+    || String(extraction?.categoryName || "").trim()
+  );
+}
+
 function setFormSearchValue(value) {
   const normalizedValue = String(value || "").trim();
   state.formSearchTerm = normalizedValue;
@@ -439,6 +532,125 @@ function findStoreByName(name) {
 function findCategoryByName(name) {
   const normalizedName = String(name || "").trim().toLowerCase();
   return state.categories.find((category) => String(category.name || "").trim().toLowerCase() === normalizedName) || null;
+}
+
+function applyExtractedStoreToForm(storeName) {
+  const normalizedStoreName = String(storeName || "").trim();
+  if (!normalizedStoreName) {
+    return;
+  }
+
+  const existingStore = findStoreByName(normalizedStoreName);
+  if (existingStore) {
+    state.StoreSearchTerm = "";
+    setFormStoreSelection(existingStore.id);
+    return;
+  }
+
+  state.StoreSearchTerm = normalizedStoreName;
+  state.formStoreId = "";
+  elements.StoreHiddenInput.value = "";
+  renderStoreList();
+  applyFilters();
+}
+
+function applyExtractedCategoryToForm(categoryName) {
+  const normalizedCategoryName = String(categoryName || "").trim();
+  if (!normalizedCategoryName) {
+    return;
+  }
+
+  const existingCategory = findCategoryByName(normalizedCategoryName);
+  if (existingCategory) {
+    state.categorySearchTerm = "";
+    setFormCategorySelection(existingCategory.name, { source: "manual" });
+    return;
+  }
+
+  state.categorySearchTerm = normalizedCategoryName;
+  state.formCategoryValue = "";
+  state.categorySelectionSource = "manual";
+  elements.categoryHiddenInput.value = "";
+  renderCategoryList();
+  applyFilters();
+}
+
+function applyLabelExtractionToForm(extraction) {
+  const product = String(extraction?.product || "").trim();
+  const price = String(extraction?.price || "").trim();
+  const storeName = String(extraction?.storeName || "").trim();
+  const categoryName = String(extraction?.categoryName || "").trim();
+
+  if (product && elements.productInput) {
+    elements.productInput.value = product;
+    state.formSearchTerm = product;
+    renderProductInlineSuggestion();
+    syncSuggestedCategoryFromProduct();
+  }
+
+  if (price && elements.priceInput) {
+    elements.priceInput.value = price;
+    renderPriceInlineSuggestion();
+  }
+
+  if (storeName) {
+    applyExtractedStoreToForm(storeName);
+  }
+
+  if (categoryName) {
+    applyExtractedCategoryToForm(categoryName);
+  }
+
+  if (!categoryName && product) {
+    syncSuggestedCategoryFromProduct();
+  }
+
+  applyFilters();
+  elements.productInput?.focus();
+}
+
+async function requestLabelExtraction(file) {
+  const endpoint = getLabelAiEndpoint();
+  if (!endpoint) {
+    throw new Error("Endpoint AI non configurato.");
+  }
+
+  const formData = new FormData();
+  formData.append("image", file, file.name || "label-image");
+  formData.append("owner", state.currentOwner || "");
+  formData.append("stores_json", JSON.stringify(
+    state.Stores
+      .map((Store) => String(Store?.name || "").trim())
+      .filter(Boolean)
+      .slice(0, 200)
+  ));
+  formData.append("categories_json", JSON.stringify(
+    state.categories
+      .map((category) => String(category?.name || "").trim())
+      .filter(Boolean)
+      .slice(0, 200)
+  ));
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: getLabelAiHeaders(endpoint),
+    body: formData
+  });
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      String(payload?.error || payload?.message || `Analisi etichetta fallita (${response.status}).`)
+    );
+  }
+
+  return payload;
 }
 
 function getDefaultStore() {
@@ -1267,6 +1479,8 @@ function setPriceFormMode(mode, row = null) {
     state.editingRowId = row.id;
     state.categorySelectionSource = "manual";
     state.suggestedCategoryValue = "";
+    clearLabelPhotoStatus();
+    setLabelPhotoBusy(false);
     elements.entryRow?.classList.add("entry-row-editing");
 
     if (elements.productInput) {
@@ -1292,6 +1506,8 @@ function setPriceFormMode(mode, row = null) {
   state.categorySearchTerm = "";
   state.categorySelectionSource = "none";
   state.suggestedCategoryValue = "";
+  clearLabelPhotoStatus();
+  setLabelPhotoBusy(false);
   elements.entryRow?.classList.remove("entry-row-editing");
   setFormStoreSelection("");
   setFormCategorySelection("", { source: "none" });
@@ -3334,6 +3550,8 @@ function handlePriceResetFilters() {
   state.productInlineSuggestion = null;
   state.categorySelectionSource = "none";
   state.suggestedCategoryValue = "";
+  clearLabelPhotoStatus();
+  setLabelPhotoBusy(false);
 
   renderStoreList();
   renderCategoryList();
@@ -3407,6 +3625,79 @@ function handleProductInlineSuggestionClick() {
   applyProductInlineSuggestion();
 }
 
+function handleLabelPhotoButtonClick() {
+  clearFeedback();
+
+  if (state.labelPhotoBusy) {
+    return;
+  }
+
+  if (!state.currentOwner) {
+    showFeedback("Seleziona prima un owner per usare la foto etichetta.", "error");
+    setOwnerStatus("Seleziona prima un owner per usare la foto etichetta.", "error");
+    openOwnerDropdown();
+    return;
+  }
+
+  if (!elements.labelPhotoInput) {
+    showFeedback("Input foto non disponibile.", "error");
+    return;
+  }
+
+  elements.labelPhotoInput.click();
+}
+
+async function handleLabelPhotoInputChange(event) {
+  const input = event.currentTarget;
+  if (!(input instanceof HTMLInputElement)) {
+    return;
+  }
+
+  const file = input.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  const maxBytes = getLabelAiMaxFileSizeBytes();
+  if (!String(file.type || "").startsWith("image/")) {
+    input.value = "";
+    setLabelPhotoStatus("Seleziona un'immagine valida.", "error");
+    showFeedback("Seleziona un'immagine valida.", "error");
+    return;
+  }
+
+  if (file.size > maxBytes) {
+    input.value = "";
+    const maxMb = Math.round((maxBytes / (1024 * 1024)) * 10) / 10;
+    const message = `Immagine troppo pesante. Limite ${maxMb} MB.`;
+    setLabelPhotoStatus(message, "error");
+    showFeedback(message, "error");
+    return;
+  }
+
+  setLabelPhotoBusy(true);
+  setLabelPhotoStatus("Analisi etichetta in corso...", "neutral");
+  showLoadingOverlay("Analisi etichetta...");
+
+  try {
+    const extraction = await requestLabelExtraction(file);
+    if (!hasUsefulLabelExtraction(extraction)) {
+      throw new Error("Non sono riuscito a leggere dati affidabili dalla foto.");
+    }
+
+    applyLabelExtractionToForm(extraction);
+    setLabelPhotoStatus(buildLabelPhotoSummary(extraction), "success");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Analisi etichetta fallita.";
+    setLabelPhotoStatus(message, "error");
+    showFeedback(message, "error");
+  } finally {
+    hideLoadingOverlay();
+    setLabelPhotoBusy(false);
+    input.value = "";
+  }
+}
+
 function handleRowsBodyInput(event) {
   const target = event.target;
   if (!(target instanceof HTMLInputElement) || !target.classList.contains("row-quantity-input")) {
@@ -3453,6 +3744,8 @@ function bindEvents() {
   elements.priceInput?.addEventListener("keydown", handlePriceInputKeydown);
   elements.productInlineSuggestion?.addEventListener("click", handleProductInlineSuggestionClick);
   elements.priceInlineSuggestion?.addEventListener("click", handlePriceInlineSuggestionClick);
+  elements.labelPhotoButton?.addEventListener("click", handleLabelPhotoButtonClick);
+  elements.labelPhotoInput?.addEventListener("change", handleLabelPhotoInputChange);
   elements.feedback?.addEventListener("click", handleFeedbackClick);
 
   // Store e Categoria dropdown (nel form)

@@ -1,4 +1,4 @@
-export const APP_VERSION = "20260421-1";
+export const APP_VERSION = "20260515-1";
 export const TABLE_COLUMN_COUNT = 6;
 export const FEEDBACK_DISMISS_MS = 7000;
 export const QUANTITY_UPDATE_DEBOUNCE_MS = 650;

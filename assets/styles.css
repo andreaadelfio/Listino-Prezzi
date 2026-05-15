@@ -1038,6 +1038,19 @@ td.entry-actions-cell {
   gap: 0.55rem;
 }
 
+.entry-meta {
+  max-width: 13rem;
+  line-height: 1.35;
+}
+
+.entry-meta-success {
+  color: var(--mint);
+}
+
+.entry-meta-error {
+  color: var(--danger);
+}
+
 .entry-button-row {
   display: flex;
   gap: 0.55rem;
