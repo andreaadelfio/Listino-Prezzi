@@ -92,6 +92,120 @@ function sanitizeExtractionResult(value: unknown): LabelExtractionResult {
   };
 }
 
+function normalizePriceValue(value: string) {
+  return String(value || "")
+    .replace(/\s/g, "")
+    .replace(/,/g, ".")
+    .replace(/€|EUR/gi, "")
+    .trim();
+}
+
+function cleanProductText(line: string, priceMatch: string) {
+  return line
+    .replace(priceMatch, "")
+    .replace(/€|EUR/gi, "")
+    .replace(/\b(kg|g|ml|l|lt|ltr|pz|pezzi|x|\*)\b/gi, "")
+    .replace(/[\s\-–_]{2,}/g, " ")
+    .replace(/[^\p{L}\p{N} ,.'\/]/gu, " ")
+    .trim();
+}
+
+function isNoiseLine(line: string) {
+  if (!line) {
+    return true;
+  }
+
+  const normalized = line.toLowerCase();
+  return Boolean(
+    normalized.match(/^\d{1,2}[\/:]\d{1,2}(?:[\/:]\d{2,4})?$/)
+    || normalized.match(/^totale\b/)
+    || normalized.match(/^iva\b/)
+    || normalized.match(/^sconto\b/)
+    || normalized.match(/^quantita\b/)
+    || normalized.match(/^prezzo\b/)
+    || normalized.match(/^euro\b/)
+    || normalized.match(/^tel\b/) 
+    || normalized.match(/^codice\b/)
+    || normalized.match(/^data\b/)
+    || normalized.match(/^scadenza\b/)
+  );
+}
+
+function extractLabelData(parsedText: string) {
+  const lines = parsedText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const priceRegex = /\b\d{1,3}(?:[.,]\d{2})(?:\s?(?:€|EUR))?\b/;
+  const priceRegexGlobal = /\b\d{1,3}(?:[.,]\d{2})(?:\s?(?:€|EUR))?\b/g;
+  let product = "";
+  let price = "";
+  let storeName = "";
+
+  if (lines.length) {
+    const candidateStore = lines.find((line) => !isNoiseLine(line) && !priceRegex.test(line));
+    if (candidateStore) {
+      storeName = candidateStore;
+    }
+
+    const candidates = lines
+      .map((line, index) => {
+        const matches = Array.from(line.matchAll(priceRegexGlobal));
+        if (!matches.length) {
+          return null;
+        }
+
+        const match = matches[0][0];
+        const productCandidate = cleanProductText(line, match);
+        return {
+          index,
+          line,
+          match,
+          productCandidate,
+          score: productCandidate.length > 2 ? 2 : 1
+        };
+      })
+      .filter(Boolean) as Array<{
+        index: number;
+        line: string;
+        match: string;
+        productCandidate: string;
+        score: number;
+      }>;
+
+    if (candidates.length) {
+      const bestCandidate = candidates.sort((a, b) => b.score - a.score)[0];
+      price = normalizePriceValue(bestCandidate.match);
+      product = bestCandidate.productCandidate;
+
+      if (!product) {
+        const previousLine = lines[bestCandidate.index - 1] || "";
+        if (previousLine && !isNoiseLine(previousLine)) {
+          product = previousLine;
+        }
+      }
+
+      if (!product && candidates.length > 1) {
+        const nextLine = lines[bestCandidate.index + 1] || "";
+        if (nextLine && !isNoiseLine(nextLine)) {
+          product = nextLine;
+        }
+      }
+    }
+
+    if (!storeName && lines.length > 0) {
+      storeName = lines[0];
+    }
+  }
+
+  return {
+    product: product.trim(),
+    price: price.trim(),
+    storeName: storeName.trim()
+  };
+}
+
 function extractOutputText(payload: Record<string, unknown>) {
   if (typeof payload.output_text === "string" && payload.output_text.trim()) {
     return payload.output_text.trim();
@@ -198,48 +312,7 @@ Deno.serve(async (request) => {
       ? String(ocrPayload.ParsedResults[0].ParsedText || "").trim()
       : "";
 
-    // Estrapolazioni euristiche dal testo OCR: prezzo, prodotto, store
-    let product = "";
-    let price = "";
-    let storeName = "";
-
-    if (parsedText) {
-      const lines = parsedText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      if (lines.length) {
-        // probabile store nel top del documento
-        storeName = lines[0];
-
-        // cerchiamo la prima occorrenza di un prezzo (es. 1,99 o 10.50)
-        const priceRegex = /\b(\d{1,3}(?:[.,]\d{2}))(?:\s?€|\s?EUR)?\b/;
-        for (let i = 0; i < lines.length; i++) {
-          const match = lines[i].match(priceRegex);
-          if (match) {
-            price = match[1].replace(',', '.');
-            // proviamo a prendere la descrizione prodotto dalla stessa riga o dalla riga precedente
-            const candidateLine = lines[i].replace(match[0], '').trim();
-            if (candidateLine) {
-              product = candidateLine;
-            } else if (i > 0) {
-              product = lines[i - 1];
-            }
-            break;
-          }
-        }
-
-        // fallback: se nessun prezzo trovato, proviamo a cercare numeri con 2 decimali
-        if (!price) {
-          const fallbackRegex = /\b(\d+[.,]\d{2})\b/;
-          for (let i = 0; i < lines.length; i++) {
-            const m = lines[i].match(fallbackRegex);
-            if (m) {
-              price = m[1].replace(',', '.');
-              product = lines[i].replace(m[0], '').trim() || (i > 0 ? lines[i - 1] : "");
-              break;
-            }
-          }
-        }
-      }
-    }
+    const { product, price, storeName } = extractLabelData(parsedText);
 
     const parsedResult = sanitizeExtractionResult({
       product: product || "",
