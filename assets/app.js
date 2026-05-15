@@ -248,7 +248,7 @@ function getLabelAiHeaders(endpoint) {
 
   if (supabaseKey && endpoint.includes("/functions/v1/")) {
     headers.apikey = supabaseKey;
-    headers.Authorization = `Bearer ${supabaseKey}`;
+    // headers.Authorization = `Bearer ${supabaseKey}`;
   }
 
   return headers;
