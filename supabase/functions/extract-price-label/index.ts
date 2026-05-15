@@ -149,82 +149,91 @@ Deno.serve(async (request) => {
     }
 
     const imageBytes = new Uint8Array(await image.arrayBuffer());
-    const imageDataUrl = `data:${image.type};base64,${encodeBase64(imageBytes)}`;
+    // Preferiamo usare un servizio OCR esterno (ocr.space) per evitare l'uso di OpenAI.
+    const ocrApiKey = Deno.env.get("OCR_SPACE_API_KEY");
+    if (!ocrApiKey) {
+      return jsonResponse({ error: "OCR_SPACE_API_KEY non configurata nei secret Supabase." }, { status: 500 });
+    }
 
-    const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
+    // Inviamo l'immagine come multipart/form-data a OCR.space
+    const form = new FormData();
+    form.append("apikey", ocrApiKey);
+    form.append("language", "ita");
+    form.append("isOverlayRequired", "false");
+    form.append("file", new Blob([imageBytes], { type: image.type }), "image.jpg");
+
+    const ocrResponse = await fetch("https://api.ocr.space/parse/image", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openAiApiKey}`
-      },
-      body: JSON.stringify({
-        model,
-        input: [
-          {
-            role: "system",
-            content: [
-              {
-                type: "input_text",
-                text: "Sei un estrattore affidabile di etichette prezzo per un listino supermercato. Rispondi solo con JSON compatibile con lo schema richiesto."
-              }
-            ]
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: buildExtractionPrompt(owner, stores, categories)
-              },
-              {
-                type: "input_image",
-                image_url: imageDataUrl,
-                detail: "high"
-              }
-            ]
+      body: form
+    });
+
+    let ocrPayload: any = null;
+    try {
+      ocrPayload = await ocrResponse.json();
+    } catch {
+      ocrPayload = null;
+    }
+
+    if (!ocrResponse.ok || !ocrPayload) {
+      return jsonResponse({ error: "Errore OCR esterno." }, { status: 502 });
+    }
+
+    const parsedText = Array.isArray(ocrPayload?.ParsedResults) && ocrPayload.ParsedResults[0]
+      ? String(ocrPayload.ParsedResults[0].ParsedText || "").trim()
+      : "";
+
+    // Estrapolazioni euristiche dal testo OCR: prezzo, prodotto, store
+    let product = "";
+    let price = "";
+    let storeName = "";
+
+    if (parsedText) {
+      const lines = parsedText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      if (lines.length) {
+        // probabile store nel top del documento
+        storeName = lines[0];
+
+        // cerchiamo la prima occorrenza di un prezzo (es. 1,99 o 10.50)
+        const priceRegex = /\b(\d{1,3}(?:[.,]\d{2}))(?:\s?€|\s?EUR)?\b/;
+        for (let i = 0; i < lines.length; i++) {
+          const match = lines[i].match(priceRegex);
+          if (match) {
+            price = match[1].replace(',', '.');
+            // proviamo a prendere la descrizione prodotto dalla stessa riga o dalla riga precedente
+            const candidateLine = lines[i].replace(match[0], '').trim();
+            if (candidateLine) {
+              product = candidateLine;
+            } else if (i > 0) {
+              product = lines[i - 1];
+            }
+            break;
           }
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            strict: true,
-            name: "price_label_extraction",
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                product: { type: "string" },
-                price: { type: "string" },
-                storeName: { type: "string" },
-                categoryName: { type: "string" },
-                confidence: { type: "number" },
-                notes: { type: "string" }
-              },
-              required: ["product", "price", "storeName", "categoryName", "confidence", "notes"]
+        }
+
+        // fallback: se nessun prezzo trovato, proviamo a cercare numeri con 2 decimali
+        if (!price) {
+          const fallbackRegex = /\b(\d+[.,]\d{2})\b/;
+          for (let i = 0; i < lines.length; i++) {
+            const m = lines[i].match(fallbackRegex);
+            if (m) {
+              price = m[1].replace(',', '.');
+              product = lines[i].replace(m[0], '').trim() || (i > 0 ? lines[i - 1] : "");
+              break;
             }
           }
         }
-      })
+      }
+    }
+
+    const parsedResult = sanitizeExtractionResult({
+      product: product || "",
+      price: price || "",
+      storeName: storeName || "",
+      categoryName: "",
+      confidence: 0,
+      notes: parsedText || ""
     });
 
-    const openAiPayload = await openAiResponse.json();
-    if (!openAiResponse.ok) {
-      let apiError = "OpenAI error";
-      if (openAiPayload && typeof openAiPayload === "object") {
-        const errorValue = (openAiPayload as Record<string, unknown>).error;
-        if (errorValue && typeof errorValue === "object" && "message" in errorValue) {
-          apiError = String((errorValue as Record<string, unknown>).message || apiError);
-        }
-      }
-      return jsonResponse({ error: apiError }, { status: 502 });
-    }
-
-    const outputText = extractOutputText(openAiPayload as Record<string, unknown>);
-    if (!outputText) {
-      return jsonResponse({ error: "Risposta AI vuota." }, { status: 502 });
-    }
-
-    const parsedResult = sanitizeExtractionResult(JSON.parse(outputText));
     return jsonResponse(parsedResult);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Errore inatteso durante l'analisi.";
