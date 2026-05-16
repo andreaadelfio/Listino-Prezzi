@@ -7,7 +7,6 @@ const corsHeaders = {
 type LabelExtractionResult = {
   product: string;
   price: string;
-  storeName: string;
   categoryName: string;
   confidence: number;
   notes: string;
@@ -83,7 +82,6 @@ function sanitizeExtractionResult(value: unknown): LabelExtractionResult {
   return {
     product: String(objectValue.product || "").trim(),
     price: String(objectValue.price || "").trim(),
-    storeName: String(objectValue.storeName || "").trim(),
     categoryName: String(objectValue.categoryName || "").trim(),
     confidence: Number.isFinite(confidenceValue)
       ? Math.min(Math.max(confidenceValue, 0), 1)
@@ -136,11 +134,11 @@ function extractLabelData(parsedText: string) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const priceRegex = /\b\d{1,3}(?:[.,]\d{2})(?:\s?(?:€|EUR))?\b/;
-  const priceRegexGlobal = /\b\d{1,3}(?:[.,]\d{2})(?:\s?(?:€|EUR))?\b/g;
+  // Regex più flessibile per catturare prezzi anche con spazi o formati sporchi
+  const priceRegex = /\d{1,3}[\s.,]+\d{2}/;
+  const priceRegexGlobal = /\d{1,3}[\s.,]+\d{2}/g;
   let product = "";
   let price = "";
-  let storeName = "";
 
   if (lines.length) {
     const candidates = lines
@@ -192,7 +190,6 @@ function extractLabelData(parsedText: string) {
   return {
     product: product.trim(),
     price: price.trim(),
-    storeName: storeName.trim()
   };
 }
 
@@ -302,12 +299,11 @@ Deno.serve(async (request) => {
       ? String(ocrPayload.ParsedResults[0].ParsedText || "").trim()
       : "";
 
-    const { product, price, storeName } = extractLabelData(parsedText);
+    const { product, price } = extractLabelData(parsedText);
 
     const parsedResult = sanitizeExtractionResult({
       product: product || "",
       price: price || "",
-      storeName: storeName || "",
       categoryName: "",
       confidence: 0,
       notes: parsedText || ""

@@ -332,7 +332,6 @@ function buildLabelPhotoSummary(extraction) {
   const summaryParts = [
     String(extraction?.product || "").trim(),
     String(extraction?.price || "").trim(),
-    String(extraction?.storeName || "").trim(),
     String(extraction?.categoryName || "").trim()
   ].filter(Boolean);
 
@@ -350,7 +349,6 @@ function hasUsefulLabelExtraction(extraction) {
   return Boolean(
     String(extraction?.product || "").trim()
     || String(extraction?.price || "").trim()
-    || String(extraction?.storeName || "").trim()
     || String(extraction?.categoryName || "").trim()
   );
 }
@@ -652,7 +650,6 @@ function applyExtractedCategoryToForm(categoryName) {
 function applyLabelExtractionToForm(extraction) {
   const product = String(extraction?.product || "").trim();
   const price = String(extraction?.price || "").trim();
-  const storeName = String(extraction?.storeName || "").trim();
   const categoryName = String(extraction?.categoryName || "").trim();
 
   if (product && elements.productInput) {
@@ -665,10 +662,6 @@ function applyLabelExtractionToForm(extraction) {
   if (price && elements.priceInput) {
     elements.priceInput.value = price;
     renderPriceInlineSuggestion();
-  }
-
-  if (storeName) {
-    applyExtractedStoreToForm(storeName);
   }
 
   if (categoryName) {
@@ -3775,6 +3768,7 @@ async function handleLabelPhotoInputChange(event) {
 
   try {
     const extraction = await requestLabelExtraction(file);
+    console.log("Label extraction result:", extraction);
     if (!hasUsefulLabelExtraction(extraction)) {
       throw new Error("Non sono riuscito a leggere dati affidabili dalla foto.");
     }
