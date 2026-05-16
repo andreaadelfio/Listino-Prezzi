@@ -134,6 +134,11 @@ function isNoiseLine(line: string) {
     return true;
   }
 
+  // Righe con troppi slash o caratteri ripetuti (tipico rumore da codici a barre o riflessi)
+  if (/(.)\1{3,}/.test(line) || (line.match(/\//g) || []).length > 3) {
+    return true;
+  }
+
   return Boolean(
     normalized.match(/^\d{1,2}[\/:]\d{1,2}(?:[\/:]\d{2,4})?$/)
     || normalized.match(/^totale\b/)
@@ -272,7 +277,7 @@ Deno.serve(async (request) => {
     // Preferiamo usare un servizio OCR esterno (ocr.space) per evitare l'uso di OpenAI.
     const ocrApiKey = Deno.env.get("OCR_SPACE_API_KEY");
     if (!ocrApiKey) {
-      return jsonResponse({ error: "OCR_SPACE_API_KEY non configurata nei secret Supabase." }, { status: 500 });
+      return jsonResponse({ error: "Configurazione mancante: OCR_SPACE_API_KEY non trovata nei secret Supabase." }, { status: 500 });
     }
 
     // Inviamo l'immagine come multipart/form-data a OCR.space
@@ -314,14 +319,17 @@ Deno.serve(async (request) => {
       ocrPayload = null;
     }
 
-    if (!ocrResponse.ok || !ocrPayload) {
-      console.log("[extract-price-label] OCR.space risponde con errore", { status: ocrResponse.status, payload: ocrPayload });
-      return jsonResponse({ error: "Errore OCR esterno." }, { status: 502 });
+    if (!ocrResponse.ok || !ocrPayload || ocrPayload.IsErroredOnProcessing === true) {
+      const errorMsg = ocrPayload?.ErrorMessage?.[0] || "Errore durante l'elaborazione dell'immagine (OCR).";
+      console.error("[extract-price-label] OCR.space Error:", { status: ocrResponse.status, payload: ocrPayload });
+      return jsonResponse({ error: errorMsg }, { status: 502 });
     }
 
     const parsedText = Array.isArray(ocrPayload?.ParsedResults) && ocrPayload.ParsedResults[0]
       ? String(ocrPayload.ParsedResults[0].ParsedText || "").trim()
       : "";
+
+    console.log("[extract-price-label] OCR Output:", parsedText);
 
     const { product, price } = extractLabelData(parsedText);
 
