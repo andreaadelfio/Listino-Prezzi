@@ -136,7 +136,6 @@ function extractLabelData(parsedText: string) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-
   const priceRegex = /\b\d{1,3}(?:[.,]\d{2})(?:\s?(?:€|EUR))?\b/;
   const priceRegexGlobal = /\b\d{1,3}(?:[.,]\d{2})(?:\s?(?:€|EUR))?\b/g;
   let product = "";
