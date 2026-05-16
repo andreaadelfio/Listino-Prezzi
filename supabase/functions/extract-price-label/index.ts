@@ -122,11 +122,18 @@ function cleanProductText(line: string, priceMatch: string) {
 }
 
 function isNoiseLine(line: string) {
-  if (!line) {
+  if (!line || line.length < 2) {
     return true;
   }
 
   const normalized = line.toLowerCase();
+  
+  // Se la riga ha troppi simboli rispetto alle lettere/numeri, è quasi certamente errore OCR
+  const alphanumeric = line.replace(/[^\p{L}\p{N}]/gu, "");
+  if (line.length > 4 && (alphanumeric.length / line.length) < 0.4) {
+    return true;
+  }
+
   return Boolean(
     normalized.match(/^\d{1,2}[\/:]\d{1,2}(?:[\/:]\d{2,4})?$/)
     || normalized.match(/^totale\b/)
@@ -148,8 +155,8 @@ function extractLabelData(parsedText: string) {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  // Regex flessibile: cerca cifre seguite da separatore e 1 o 2 decimali
-  const priceRegex = /\d{1,3}[\s.,]+\d{1,2}/;
+  // Regex migliorata: cerca un numero, un separatore (punto, virgola o spazio) e 2 decimali
+  const priceRegex = /\d{1,3}[.,\s]\s?\d{2}/;
   let product = "";
   let price = "";
   let bestPriceIndex = -1;
@@ -192,11 +199,14 @@ function extractLabelData(parsedText: string) {
     // 3. Fallback estremo: se non abbiamo nulla, prendi la riga più lunga non "rumore"
     if (!product && !price) {
       const validLines = lines
-        .filter(l => !isNoiseLine(l) && l.length > 3)
+        .filter(l => !isNoiseLine(l) && l.length > 2)
         .sort((a, b) => b.length - a.length);
       
       if (validLines.length > 0) {
-        product = validLines[0];
+        // Accetta come prodotto solo se contiene almeno 3 lettere consecutive (evita codici/simboli)
+        if (/[a-zA-Z\u00C0-\u017F]{3,}/.test(validLines[0])) {
+          product = validLines[0];
+        }
       }
     }
   }
