@@ -144,11 +144,6 @@ function extractLabelData(parsedText: string) {
   let storeName = "";
 
   if (lines.length) {
-    const candidateStore = lines.find((line) => !isNoiseLine(line) && !priceRegex.test(line));
-    if (candidateStore) {
-      storeName = candidateStore;
-    }
-
     const candidates = lines
       .map((line, index) => {
         const matches = Array.from(line.matchAll(priceRegexGlobal));
@@ -192,10 +187,6 @@ function extractLabelData(parsedText: string) {
           product = nextLine;
         }
       }
-    }
-
-    if (!storeName && lines.length > 0) {
-      storeName = lines[0];
     }
   }
 
