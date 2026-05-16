@@ -232,6 +232,134 @@ function getLabelAiEndpoint() {
   return supabaseUrl ? `${supabaseUrl}/functions/v1/extract-price-label` : "";
 }
 
+// --- Nuove funzioni di parsing OCR spostate dal backend ---
+function normalizePriceValue(value) {
+  if (!value) return "";
+  
+  // Rimuovi valuta e simboli
+  let cleaned = value.replace(/€|EUR/gi, "").trim();
+  
+  // Gestione separatore: se c'è uno spazio tra cifre, o una virgola, converti in punto
+  // Es: "1 49" -> "1.49", "1,49" -> "1.49"
+  cleaned = cleaned.replace(/(\d+)[\s.,]+(\d+)/, "$1.$2");
+  
+  // Se dopo la pulizia abbiamo qualcosa che sembra un numero (es "1.49" o "1")
+  const numericMatch = cleaned.match(/\d+(?:\.\d+)?/);
+  if (numericMatch) {
+    const num = parseFloat(numericMatch[0]);
+    if (!isNaN(num)) {
+      return num.toFixed(2);
+    }
+  }
+  return cleaned;
+}
+
+function cleanProductText(line, priceMatch) {
+  return line
+    .replace(priceMatch, "")
+    .replace(/€|EUR/gi, "")
+    .replace(/\b(kg|g|ml|l|lt|ltr|pz|pezzi|x|\*)\b/gi, "")
+    .replace(/[\s\-–_]{2,}/g, " ")
+    .replace(/[^\p{L}\p{N} ,.'\/]/gu, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+function isNoiseLine(line) {
+  if (!line || line.length < 2) {
+    return true;
+  }
+
+  const normalized = line.toLowerCase();
+  
+  // Se la riga ha troppi simboli rispetto alle lettere/numeri, è quasi certamente errore OCR
+  const alphanumeric = line.replace(/[^\p{L}\p{N}]/gu, "");
+  if (line.length > 4 && (alphanumeric.length / line.length) < 0.4) {
+    return true;
+  }
+
+  // Righe con troppi slash o caratteri ripetuti (tipico rumore da codici a barre o riflessi)
+  if (/(.)\1{3,}/.test(line) || (line.match(/\//g) || []).length > 3) {
+    return true;
+  }
+
+  return Boolean(
+    normalized.match(/^\d{1,2}[\/:]\d{1,2}(?:[\/:]\d{2,4})?$/)
+    || normalized.match(/^totale\b/)
+    || normalized.match(/^iva\b/)
+    || normalized.match(/^sconto\b/)
+    || normalized.match(/^quantita\b/)
+    || normalized.match(/^prezzo\b/)
+    || normalized.match(/^euro\b/)
+    || normalized.match(/^tel\b/) 
+    || normalized.match(/^codice\b/)
+    || normalized.match(/^data\b/)
+    || normalized.match(/^scadenza\b/)
+  );
+}
+
+function parseOcrText(rawText) {
+  const lines = String(rawText || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const priceRegex = /\d{1,3}[.,\s]\s?\d{2}/;
+  let product = "";
+  let price = "";
+  let bestPriceIndex = -1;
+
+  if (lines.length) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (isNoiseLine(line)) continue;
+
+      const match = line.match(priceRegex);
+      if (match) {
+        price = normalizePriceValue(match[0]);
+        bestPriceIndex = i;
+        
+        const cleaned = cleanProductText(line, match[0]);
+        if (cleaned.length > 3) {
+          product = cleaned;
+          break;
+        }
+      }
+    }
+
+    if (price && !product && bestPriceIndex !== -1) {
+      const prev = lines[bestPriceIndex - 1];
+      if (prev && !isNoiseLine(prev) && prev.length > 2) {
+        product = prev;
+      } else {
+        const next = lines[bestPriceIndex + 1];
+        if (next && !isNoiseLine(next) && next.length > 2) {
+          product = next;
+        }
+      }
+    }
+
+    if (!product && !price) {
+      const validLines = lines
+        .filter(l => !isNoiseLine(l) && l.length > 2)
+        .sort((a, b) => b.length - a.length);
+      
+      if (validLines.length > 0) {
+        if (/[a-zA-Z\u00C0-\u017F]{3,}/.test(validLines[0])) {
+          product = validLines[0];
+        }
+      }
+    }
+  }
+
+  return {
+    product: product.trim(),
+    price: price.trim(),
+    categoryName: "",
+    confidence: 0
+  };
+}
+// --- Fine nuove funzioni di parsing OCR ---
+
 function getLabelAiMaxFileSizeBytes() {
   const maxFileSizeMb = Number(window.APP_CONFIG?.labelAiMaxFileSizeMb || 8);
   const normalizedMb = Number.isFinite(maxFileSizeMb) && maxFileSizeMb > 0
@@ -328,29 +456,25 @@ function getLabelAiHeaders(endpoint) {
   return headers;
 }
 
+// Aggiornata per usare il risultato del parsing locale
 function buildLabelPhotoSummary(extraction) {
+  const parsed = parseOcrText(extraction?.notes || "");
   const summaryParts = [
-    String(extraction?.product || "").trim(),
-    String(extraction?.price || "").trim(),
-    String(extraction?.categoryName || "").trim()
+    String(parsed.product || "").trim(),
+    String(parsed.price || "").trim(),
+    String(parsed.categoryName || "").trim()
   ].filter(Boolean);
 
-  const confidence = Number(extraction?.confidence);
-  const confidenceSuffix = Number.isFinite(confidence)
-    ? ` (${Math.round(Math.min(Math.max(confidence, 0), 1) * 100)}%)`
-    : "";
-
   return summaryParts.length
-    ? `Foto letta${confidenceSuffix}: ${summaryParts.join(" · ")}`
+    // Rimosso il suffisso di confidence dato che non viene più calcolato qui
+    ? `Foto letta: ${summaryParts.join(" · ")}`
     : "Foto letta, ma con pochi dettagli utili.";
 }
 
+// Aggiornata per usare il risultato del parsing locale
 function hasUsefulLabelExtraction(extraction) {
-  return Boolean(
-    String(extraction?.product || "").trim()
-    || String(extraction?.price || "").trim()
-    || String(extraction?.categoryName || "").trim()
-  );
+  const parsed = parseOcrText(extraction?.notes || "");
+  return Boolean(parsed.product || parsed.price || parsed.categoryName);
 }
 
 function setFormSearchValue(value) {
@@ -648,10 +772,11 @@ function applyExtractedCategoryToForm(categoryName) {
 }
 
 function applyLabelExtractionToForm(extraction) {
-  const product = String(extraction?.product || "").trim();
-  const price = String(extraction?.price || "").trim();
-  const categoryName = String(extraction?.categoryName || "").trim();
-
+  // Ora estraiamo product, price e categoryName dal campo notes
+  const parsed = parseOcrText(extraction?.notes || "");
+  const product = parsed.product;
+  const price = parsed.price;
+  const categoryName = parsed.categoryName; // Potrebbe essere vuoto se non estratto
   if (product && elements.productInput) {
     elements.productInput.value = product;
     state.formSearchTerm = product;
@@ -688,20 +813,7 @@ async function requestLabelExtraction(file) {
   }
 
   const formData = new FormData();
-  formData.append("image", uploadFile, uploadFile.name || "label-image");
-  formData.append("owner", state.currentOwner || "");
-  formData.append("stores_json", JSON.stringify(
-    state.Stores
-      .map((Store) => String(Store?.name || "").trim())
-      .filter(Boolean)
-      .slice(0, 200)
-  ));
-  formData.append("categories_json", JSON.stringify(
-    state.categories
-      .map((category) => String(category?.name || "").trim())
-      .filter(Boolean)
-      .slice(0, 200)
-  ));
+  formData.append("image", uploadFile, uploadFile.name || "label-image"); // L'immagine è l'unico dato necessario
 
   const controller = new AbortController();
   const timeoutMs = 30000; // 30s timeout
