@@ -91,11 +91,24 @@ function sanitizeExtractionResult(value: unknown): LabelExtractionResult {
 }
 
 function normalizePriceValue(value: string) {
-  return String(value || "")
-    .replace(/\s/g, "")
-    .replace(/,/g, ".")
-    .replace(/€|EUR/gi, "")
-    .trim();
+  if (!value) return "";
+  
+  // Rimuovi valuta e simboli
+  let cleaned = value.replace(/€|EUR/gi, "").trim();
+  
+  // Gestione separatore: se c'è uno spazio tra cifre, o una virgola, converti in punto
+  // Es: "1 49" -> "1.49", "1,49" -> "1.49"
+  cleaned = cleaned.replace(/(\d+)[\s.,]+(\d+)/, "$1.$2");
+  
+  // Se dopo la pulizia abbiamo qualcosa che sembra un numero (es "1.49" o "1")
+  const numericMatch = cleaned.match(/\d+(?:\.\d+)?/);
+  if (numericMatch) {
+    const num = parseFloat(numericMatch[0]);
+    if (!isNaN(num)) {
+      return num.toFixed(2);
+    }
+  }
+  return cleaned;
 }
 
 function cleanProductText(line: string, priceMatch: string) {
@@ -105,7 +118,7 @@ function cleanProductText(line: string, priceMatch: string) {
     .replace(/\b(kg|g|ml|l|lt|ltr|pz|pezzi|x|\*)\b/gi, "")
     .replace(/[\s\-–_]{2,}/g, " ")
     .replace(/[^\p{L}\p{N} ,.'\/]/gu, " ")
-    .trim();
+    .replace(/\s+/g, " ").trim();
 }
 
 function isNoiseLine(line: string) {
@@ -134,55 +147,56 @@ function extractLabelData(parsedText: string) {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  // Regex più flessibile per catturare prezzi anche con spazi o formati sporchi
-  const priceRegex = /\d{1,3}[\s.,]+\d{2}/;
-  const priceRegexGlobal = /\d{1,3}[\s.,]+\d{2}/g;
+
+  // Regex flessibile: cerca cifre seguite da separatore e 1 o 2 decimali
+  const priceRegex = /\d{1,3}[\s.,]+\d{1,2}/;
   let product = "";
   let price = "";
+  let bestPriceIndex = -1;
 
   if (lines.length) {
-    const candidates = lines
-      .map((line, index) => {
-        const matches = Array.from(line.matchAll(priceRegexGlobal));
-        if (!matches.length) {
-          return null;
-        }
+    // 1. Cerca il prezzo più probabile
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (isNoiseLine(line)) continue;
 
-        const match = matches[0][0];
-        const productCandidate = cleanProductText(line, match);
-        return {
-          index,
-          line,
-          match,
-          productCandidate,
-          score: productCandidate.length > 2 ? 2 : 1
-        };
-      })
-      .filter(Boolean) as Array<{
-        index: number;
-        line: string;
-        match: string;
-        productCandidate: string;
-        score: number;
-      }>;
-
-    if (candidates.length) {
-      const bestCandidate = candidates.sort((a, b) => b.score - a.score)[0];
-      price = normalizePriceValue(bestCandidate.match);
-      product = bestCandidate.productCandidate;
-
-      if (!product) {
-        const previousLine = lines[bestCandidate.index - 1] || "";
-        if (previousLine && !isNoiseLine(previousLine)) {
-          product = previousLine;
+      const match = line.match(priceRegex);
+      if (match) {
+        price = normalizePriceValue(match[0]);
+        bestPriceIndex = i;
+        
+        // Prova a estrarre il prodotto dalla stessa riga
+        const cleaned = cleanProductText(line, match[0]);
+        if (cleaned.length > 3) {
+          product = cleaned;
+          break; // Abbiamo tutto
         }
       }
+    }
 
-      if (!product && candidates.length > 1) {
-        const nextLine = lines[bestCandidate.index + 1] || "";
-        if (nextLine && !isNoiseLine(nextLine)) {
-          product = nextLine;
+    // 2. Se abbiamo il prezzo ma non il prodotto, guarda le righe vicine
+    if (price && !product && bestPriceIndex !== -1) {
+      // Di solito il nome del prodotto è SOPRA il prezzo
+      const prev = lines[bestPriceIndex - 1];
+      if (prev && !isNoiseLine(prev) && prev.length > 2) {
+        product = prev;
+      } else {
+        // Altrimenti prova SOTTO
+        const next = lines[bestPriceIndex + 1];
+        if (next && !isNoiseLine(next) && next.length > 2) {
+          product = next;
         }
+      }
+    }
+
+    // 3. Fallback estremo: se non abbiamo nulla, prendi la riga più lunga non "rumore"
+    if (!product && !price) {
+      const validLines = lines
+        .filter(l => !isNoiseLine(l) && l.length > 3)
+        .sort((a, b) => b.length - a.length);
+      
+      if (validLines.length > 0) {
+        product = validLines[0];
       }
     }
   }
