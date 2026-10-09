@@ -677,7 +677,8 @@ function createSupabaseClient() {
     throw new Error("Supabase URL o chiave mancante in assets/config.js.");
   }
 
-  return window.supabase.createClient(supabaseUrl, supabaseKey);
+  // le tabelle del listino stanno nello schema `listino` del progetto MyFinance
+  return window.supabase.createClient(supabaseUrl, supabaseKey, { db: { schema: "listino" } });
 }
 
 function setSelectValue(selectElement, value) {

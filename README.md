@@ -10,7 +10,28 @@ Piccola web app statica per gestire un listino prezzi con persistenza su Supabas
 - `assets/styles.css`: stile dell'interfaccia.
 - `assets/config.js`: configurazione client Supabase.
 - `service-worker.js`: cache dell'app shell per uso rapido/offline.
-- `supabase/schema.sql`: schema database.
+- `supabase/listino_schema.sql`: schema database (schema `listino` nel progetto Supabase di MyFinance).
+- `supabase/schema.sql`: schema storico del vecchio progetto Supabase dedicato al Listino.
+- `supabase/migrate_to_myfinance.py`: migrazione dal vecchio progetto a MyFinance.
+
+## Database
+
+Dal 2026-10 le tabelle stanno nello schema `listino` del progetto Supabase di **MyFinance**
+(in vista dell'unione dei due siti); il client usa `db: { schema: "listino" }`.
+
+Migrazione dal vecchio progetto (una volta sola):
+
+1. `python3 supabase/migrate_to_myfinance.py`: legge i dati dal vecchio progetto (solo lettura) e
+   scrive `supabase/migration/listino_to_myfinance.sql` (ignorato da git: contiene i dati).
+2. Nel progetto MyFinance: SQL Editor, incolla il file ed eseguilo. Crea lo schema, inserisce i dati
+   con gli stessi id, riallinea le sequenze e solo alla fine crea i trigger. Rieseguirlo non duplica nulla.
+3. Project Settings -> API -> "Exposed schemas": aggiungi `listino`.
+4. Pubblica la Edge Function nel progetto MyFinance con il suo secret (vedi `supabase/functions/README.md`).
+5. `python3 supabase/migrate_to_myfinance.py --verify`: confronta i dati dei due progetti riga per riga.
+6. Solo allora unisci questo ramo in `main` e pubblica (`make git`).
+
+Le policy sono rimaste aperte come prima (chiunque abbia l'URL del sito legge e scrive): da chiudere
+con il login.
 
 ## Avvio locale
 

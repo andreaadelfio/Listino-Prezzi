@@ -137,8 +137,14 @@ npx supabase functions deploy extract-price-label
 Se il progetto non e' gia' linkato, puoi anche specificare il project ref direttamente:
 
 ```bash
-npx supabase functions deploy extract-price-label --project-ref jbpdyxztnljbfowrnsih
+npx supabase functions deploy extract-price-label --project-ref fvhzmkvqizfnbgxexdgu
+npx supabase secrets set OCR_SPACE_API_KEY=... --project-ref fvhzmkvqizfnbgxexdgu
 ```
+
+`fvhzmkvqizfnbgxexdgu` e' il progetto MyFinance, dove il Listino sta dal 2026-10 (prima era
+`jbpdyxztnljbfowrnsih`). La function usa il secret `OCR_SPACE_API_KEY`. Il sito la chiama con la
+sola chiave publishable nell'header `apikey`: se nel vecchio progetto "Verify JWT" era disattivato
+(Dashboard -> Edge Functions -> extract-price-label), pubblicala con `--no-verify-jwt`.
 
 ## 6. Verificare che sia online
 

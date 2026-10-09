@@ -1,3 +1,6 @@
+-- STORICO: schema del vecchio progetto Supabase dedicato al Listino (tabelle in `public`).
+-- Da ottobre 2026 lo schema in uso e' supabase/listino_schema.sql, nel progetto MyFinance.
+
 create extension if not exists pgcrypto;
 
 create or replace function public.set_updated_at()
