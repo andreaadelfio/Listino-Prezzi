@@ -46,8 +46,8 @@ test("scontrino_righe", async () => {
     tipo: "scontrino",
     storeName: "Lidl",
     righe: [
-      { testo: "MOZZ.FIOR.LATTE", prodotto: "Mozzarella", esistente: true, price: "1,29€", categoryName: "" },
-      { testo: "BANANE", prodotto: "Banane", esistente: true, price: "1,79€/kg", categoryName: "Frutta" }
+      { testo: "MOZZ.FIOR.LATTE", prodotto: "Mozzarella", esistente: true, price: "1,29€", incompleto: false, categoryName: "" },
+      { testo: "BANANE", prodotto: "Banane", esistente: true, price: "1,79€/kg", incompleto: false, categoryName: "Frutta" }
     ]
   });
 });
@@ -88,4 +88,13 @@ test("istruzioni_severe_sullo_scontrino", async () => {
   assert.match(testoInviato, /stesso articolo/);
   assert.match(testoInviato, /mai il nome di una categoria/);
   assert.match(testoInviato, /solo se e' scritt/);
+});
+
+test("a_peso_senza_prezzo_al_kg_e_incompleto", () => {
+  const { righe } = rispostaDaLettura({ tipo: "scontrino", store: "", righe: [
+    { testo: "ZUCCHINE BIO IT 14-2", prodotto: "Zucchine", esistente: true, a_peso: true, prezzo: 2.18, quantita: 0, unita: "nessuna", prezzo_unitario: 0, categoria: "Verdura" },
+    { testo: "BANANE", prodotto: "Banane", esistente: true, a_peso: true, prezzo: 0.95, quantita: 0.532, unita: "kg", prezzo_unitario: 1.79, categoria: "Frutta" },
+    { testo: "PENNE RIGATE", prodotto: "Penne rigate", esistente: false, a_peso: false, prezzo: 1.09, quantita: 0, unita: "nessuna", prezzo_unitario: 0, categoria: "Pasta" }
+  ] });
+  assert.deepEqual(righe.map((riga) => [riga.price, riga.incompleto]), [["", true], ["1,79€/kg", false], ["1,09€", false]]);
 });

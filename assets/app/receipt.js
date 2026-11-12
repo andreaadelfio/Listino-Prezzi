@@ -24,11 +24,16 @@ export function classifyReceiptLines(righe, storeId, rows) {
 
     const price = String(riga.price || "").trim();
     if (!price) {
-      skipped.push({ testo: riga.testo, prodotto, reason: "prezzo non letto" });
+      skipped.push({ testo: riga.testo, prodotto, reason: riga.incompleto ? "venduto a peso, manca il prezzo al kg" : "prezzo non letto" });
       continue;
     }
 
     const stessoNome = rows.filter((row) => nomeChiave(row.prodotto) === chiave);
+    // Gemini dice "nuovo" ma usa il nome di un prodotto che c'e' gia': risposta contraddittoria
+    if (riga.esistente === false && stessoNome.length) {
+      skipped.push({ testo: riga.testo, prodotto, reason: "abbinamento incerto" });
+      continue;
+    }
     const nelloStore = stessoNome.find((row) => String(row.retailer_id) === String(storeId));
     if (!nelloStore) {
       // Nuovo, o gia' presente in un altro Store: allora tiene il suo nome e la sua categoria

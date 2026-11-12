@@ -42,11 +42,12 @@ const SCHEMA_RISPOSTA = {
           testo: { type: "string", description: "la riga com'e' scritta sullo scontrino" },
           prodotto: { type: "string", description: "il nome esatto di uno dei prodotti dati solo se e' lo stesso articolo (stesso tipo e, se il nome la dice, stessa marca); altrimenti un nome breve in italiano, al massimo 4 parole, che dica cos'e' (es. 'Filetti di sgombro'), mai il nome di una categoria" },
           esistente: { type: "boolean", description: "true solo se prodotto e' uno dei nomi dati; nel dubbio false" },
+          a_peso: { type: "boolean", description: "true se si confronta al kg: frutta, verdura, carne, pesce, formaggi e altro venduto sfuso o in confezioni di peso variabile" },
           prezzo: { type: "number", description: "prezzo di un pezzo in euro, senza sconti (per '2 x 1,29' e' 1.29); per la roba pesata il totale della riga" },
           ...CAMPI_PREZZO,
           categoria: { type: "string", description: "una delle categorie date, quella piu' adatta; vuoto se nessuna va bene" }
         },
-        required: ["testo", "prodotto", "esistente", "prezzo", "quantita", "unita", "prezzo_unitario", "categoria"]
+        required: ["testo", "prodotto", "esistente", "a_peso", "prezzo", "quantita", "unita", "prezzo_unitario", "categoria"]
       }
     },
     prodotto: { type: "string", description: "nome breve del prodotto in italiano, al massimo 4 parole (traduci se l'etichetta e' in un'altra lingua), come in una lista della spesa: cosa e', piu' la marca solo se conta; niente elenchi di gusti, peso o descrizioni (es. 'Yogurt greco Pam', 'Succo ananas mango'); vuoto se non si legge" },
@@ -91,13 +92,19 @@ const prezzoDi = (letto: Record<string, unknown>) => prezzoDaListino(Number(lett
 export function rispostaDaLettura(letto: Record<string, any>) {
   const storeName = String(letto.store || "").trim();
   if (letto.tipo === "scontrino") {
-    const righe = (Array.isArray(letto.righe) ? letto.righe : []).map((riga: Record<string, unknown>) => ({
-      testo: String(riga.testo || "").trim(),
-      prodotto: String(riga.prodotto || "").trim(),
-      esistente: Boolean(riga.esistente),
-      price: prezzoDi(riga),
-      categoryName: String(riga.categoria || "").trim()
-    }));
+    const righe = (Array.isArray(letto.righe) ? letto.righe : []).map((riga: Record<string, unknown>) => {
+      const price = prezzoDi(riga);
+      // Venduto a peso ma senza prezzo al kg: il totale della riga non dice quanto costa
+      const incompleto = Boolean(riga.a_peso) && !/€\/kg$/.test(price);
+      return {
+        testo: String(riga.testo || "").trim(),
+        prodotto: String(riga.prodotto || "").trim(),
+        esistente: Boolean(riga.esistente),
+        price: incompleto ? "" : price,
+        incompleto,
+        categoryName: String(riga.categoria || "").trim()
+      };
+    });
     return { tipo: "scontrino", storeName, righe };
   }
   return {

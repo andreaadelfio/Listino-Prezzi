@@ -95,3 +95,17 @@ test("testo_dello_scontrino_per_controllare", () => {
   assert.equal(updated[0].testo, "MOZZ.FIOR.LATTE");
   assert.equal(added[0].testo, "FILETTI DI SGOMBRO P");
 });
+
+test("venduto_a_peso_senza_prezzo_al_kg", () => {
+  const { skipped, added } = classifyReceiptLines(
+    [riga("Zucchine", "", { esistente: false, incompleto: true, testo: "ZUCCHINE BIO IT 14-2" })], STORE, rows);
+  assert.equal(added.length, 0);
+  assert.equal(skipped[0].reason, "venduto a peso, manca il prezzo al kg");
+});
+
+test("nuovo_ma_con_nome_di_un_prodotto_esistente", () => {
+  const { skipped, updated, added } = classifyReceiptLines(
+    [riga("Mozzarella", "1,29€", { esistente: false, testo: "FILETTI DI SGOMBRO P" })], STORE, rows);
+  assert.deepEqual([updated, added], [[], []]);
+  assert.equal(skipped[0].reason, "abbinamento incerto");
+});
