@@ -10,7 +10,8 @@ const APP_SHELL = [
   "./assets/app/constants.js",
   "./assets/app/groups.js",
   "./assets/app/store.js",
-  "./assets/app/utils.js"
+  "./assets/app/utils.js",
+  "./assets/app/receipt.js"
 ];
 
 self.addEventListener("install", (event) => {

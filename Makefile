@@ -25,6 +25,10 @@ dev:
 dev_mob:
 	python3 dev_server.py 8002 --rete
 
+# Test della logica (Node 22)
+test:
+	node --test tests/*.test.mjs
+
 stop:
 	@if pkill -f "python3 -m http.server $(PORT)" 2>/dev/null; then \
 		echo "Server fermato sulla porta $(PORT)"; \
