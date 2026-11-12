@@ -1,0 +1,76 @@
+// La Edge Function, con Deno e Gemini finti: etichetta, scontrino e calcolo del prezzo
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { stripTypeScriptTypes } from "node:module";
+import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const sorgente = new URL("../supabase/functions/extract-price-label/index.ts", import.meta.url);
+const file = join(mkdtempSync(join(tmpdir(), "listino-")), "index.mjs");
+writeFileSync(file, stripTypeScriptTypes(readFileSync(sorgente, "utf8")));
+
+let handler;
+let lettura = {};
+let testoInviato = "";
+globalThis.Deno = { serve: (h) => { handler = h; }, env: { get: (k) => ({ GEMINI_API_KEY: "finta" })[k] } };
+globalThis.fetch = async (_url, init) => {
+  testoInviato = JSON.parse(init.body).contents[0].parts[1].text;
+  return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(lettura) }] } }] }));
+};
+const { prezzoDaListino, rispostaDaLettura } = await import(file);
+
+async function chiama(campi = {}) {
+  const fd = new FormData();
+  fd.append("image", new File([new Uint8Array([1])], "a.jpg", { type: "image/jpeg" }));
+  for (const [nome, valore] of Object.entries(campi)) fd.append(nome, JSON.stringify(valore));
+  return (await handler(new Request("http://x/", { method: "POST", body: fd }))).json();
+}
+
+test("etichetta_come_prima", async () => {
+  lettura = { tipo: "etichetta", prodotto: "Succo ananas mango", prezzo: 1.98, quantita: 500, unita: "ml", prezzo_unitario: 0, store: "Lidl", categoria: "Bevande", righe: [] };
+  assert.deepEqual(await chiama(), { tipo: "etichetta", product: "Succo ananas mango", price: "3,96€/l", storeName: "Lidl", categoryName: "Bevande" });
+});
+
+test("scontrino_righe", async () => {
+  lettura = {
+    tipo: "scontrino", prodotto: "", prezzo: 0, quantita: 0, unita: "nessuna", prezzo_unitario: 0, store: "Lidl", categoria: "",
+    righe: [
+      { testo: "MOZZ.FIOR.LATTE", prodotto: "Mozzarella", esistente: true, prezzo: 1.29, quantita: 0, unita: "nessuna", prezzo_unitario: 0, categoria: "" },
+      { testo: "BANANE", prodotto: "Banane", esistente: true, prezzo: 0.95, quantita: 0.532, unita: "kg", prezzo_unitario: 1.79, categoria: "Frutta" }
+    ]
+  };
+  assert.deepEqual(await chiama(), {
+    tipo: "scontrino",
+    storeName: "Lidl",
+    righe: [
+      { testo: "MOZZ.FIOR.LATTE", prodotto: "Mozzarella", esistente: true, price: "1,29€", categoryName: "" },
+      { testo: "BANANE", prodotto: "Banane", esistente: true, price: "1,79€/kg", categoryName: "Frutta" }
+    ]
+  });
+});
+
+test("rispostaDaLettura_senza_righe", () => {
+  assert.deepEqual(rispostaDaLettura({ tipo: "scontrino", store: "Pam" }), { tipo: "scontrino", storeName: "Pam", righe: [] });
+});
+
+test("prodotti_nel_testo", async () => {
+  await chiama({ prodotti: ["Mozzarella", "Passata di pomodoro"] });
+  assert.match(testoInviato, /Mozzarella, Passata di pomodoro/);
+});
+
+test("prezzoDaListino_casi", () => {
+  const casi = [
+    [[1.98, 500, "ml", 3.96], "3,96€/l"],
+    [[1.98, 500, "ml", 0], "3,96€/l"],
+    [[2.49, 250, "g", 0], "9,96€/kg"],
+    [[1.2, 75, "cl", 0], "1,60€/l"],
+    [[3.4, 1, "kg", 0], "3,40€/kg"],
+    [[4.99, 36, "pz", 0], "4,99€/36pz"],
+    [[0.89, 1, "pz", 0], "0,89€"],
+    [[1.5, 0, "", 0], "1,50€"],
+    [[1.5, 0, "nessuna", 0], "1,50€"],
+    [[0, 0, "", 0], ""]
+  ];
+  for (const [argomenti, atteso] of casi) assert.equal(prezzoDaListino(...argomenti), atteso, String(argomenti));
+});

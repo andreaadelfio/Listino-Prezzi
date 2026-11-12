@@ -2,24 +2,25 @@
 
 ## `extract-price-label`
 
-Riceve la foto di un'etichetta di prezzo (campo `image`, multipart) e, facoltativi, i nomi di
-categorie e Store gia' nel listino (`categorie`, `store`, in JSON). La legge con **Gemini** e
-risponde:
+Riceve una foto (campo `image`, multipart) e, facoltativi, i nomi gia' nel listino: `categorie`,
+`store` e `prodotti` (JSON). Gemini capisce da solo se e' un'etichetta o uno scontrino.
+
+Etichetta (il sito riempie il form):
 
 ```json
-{ "product": "Yogurt greco Pam", "price": "5,60€/kg", "storeName": "Pam", "categoryName": "Latte e derivati" }
+{ "tipo": "etichetta", "product": "Yogurt greco Pam", "price": "5,60€/kg", "storeName": "Pam", "categoryName": "Latte e derivati" }
 ```
 
-Il prezzo segue il formato del listino. Gemini legge prezzo della confezione (senza cauzione, es.
-Statiegeld), quantita' con unita' e l'eventuale prezzo al kg/litro stampato; la funzione
-(`prezzoDaListino`) ne ricava:
+Scontrino (il sito mostra la finestrella da confermare; vedi `assets/app/receipt.js`):
 
-- `3,96€/l` o `9,96€/kg`: quello stampato, oppure calcolato da prezzo e peso/volume
-  (es. 1,98 € per 500 ml);
-- `4,99€/36pz` per le confezioni a pezzi;
-- `1,50€` se peso e volume non ci sono.
+```json
+{ "tipo": "scontrino", "storeName": "Lidl", "righe": [
+  { "testo": "MOZZ.FIOR.LATTE", "prodotto": "Mozzarella", "esistente": true, "price": "1,29€", "categoryName": "" }
+] }
+```
 
-Il nome del prodotto viene in italiano anche se l'etichetta e' in un'altra lingua.
+Per lo scontrino `prodotto` e' il nome esatto di un prodotto gia' nel listino quando e' lo stesso
+articolo; il prezzo e' quello di un pezzo senza sconti; sconti, cauzione, totali e sacchetti non sono righe.
 
 ### Modelli e secret
 
@@ -37,7 +38,6 @@ npx supabase functions deploy extract-price-label --project-ref fvhzmkvqizfnbgxe
 ```
 
 Il sito la chiama con la sola chiave publishable nell'header `apikey`, per questo `--no-verify-jwt`.
-Va pubblicata insieme al sito: il sito vecchio si aspettava il testo grezzo dell'OCR (`notes`),
-quello nuovo i campi qui sopra.
+Ogni volta che cambia la risposta va pubblicata insieme al sito.
 
-Serve aver fatto una volta `npx supabase login` (Node.js 20+).
+Serve aver fatto una volta `npx supabase login` (Node.js 20+). Test con Deno e Gemini finti: `make test`.

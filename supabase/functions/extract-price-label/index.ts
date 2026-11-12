@@ -1,8 +1,10 @@
-// Legge la foto di un'etichetta di prezzo con Gemini e restituisce i campi del form:
-// {product, price, storeName, categoryName}. Il sito li mette nel form, il salvataggio resta manuale.
+// Legge con Gemini la foto di un'etichetta di prezzo o di uno scontrino (lo capisce Gemini).
+//   etichetta: {tipo: "etichetta", product, price, storeName, categoryName}: il sito riempie il form
+//   scontrino: {tipo: "scontrino", storeName, righe: [{testo, prodotto, esistente, price, categoryName}]}:
+//              il sito mostra una finestrella da confermare. Il salvataggio resta sempre manuale.
 //
-// Richiesta: POST multipart con "image" (la foto) e, facoltativi, "categorie" e "store" (JSON con i
-// nomi gia' presenti nel listino, cosi' Gemini sceglie fra quelli invece di inventarne di nuovi).
+// Richiesta: POST multipart con "image" (la foto) e, facoltativi, "categorie", "store" e "prodotti"
+// (JSON con i nomi gia' presenti nel listino, cosi' Gemini sceglie fra quelli invece di inventarne).
 //
 // Secret: GEMINI_API_KEY (lo stesso di MyBody, che sta nello stesso progetto Supabase); facoltativi
 // GEMINI_MODEL e GEMINI_RISERVA, come in MyBody.
@@ -12,8 +14,8 @@ declare const Deno: { serve: (h: (r: Request) => Promise<Response>) => void; env
 // Come MyBody: prima Flash-Lite (veloce), poi il Flash piu' recente se il primo non risponde
 const MODELLO_PREDEFINITO = "gemini-3.5-flash-lite";
 const RISERVA_PREDEFINITA = "gemini-flash-latest";
-// Il sito aspetta 30 secondi in tutto: 12 a modello
-const TEMPO_GEMINI = 12 * 1000;
+// Uno scontrino lungo richiede piu' lettura: 25 secondi a modello, il sito ne aspetta 60
+const TEMPO_GEMINI = 25 * 1000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,18 +23,39 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS"
 };
 
+const CAMPI_PREZZO = {
+  quantita: { type: "number", description: "peso, volume o numero di pezzi della confezione come scritto (es. 500 per '500ml', 0.532 per '0,532 kg' della roba pesata); 0 se non c'e'" },
+  unita: { type: "string", enum: ["g", "kg", "ml", "cl", "l", "pz", "nessuna"], description: "l'unita' della quantita ('nessuna' se non c'e')" },
+  prezzo_unitario: { type: "number", description: "il prezzo al kg o al litro se e' stampato (es. 3.96 per '1 L = 3.96', 1.79 per '0,532 kg x 1,79 €/kg'); 0 se non c'e'" }
+};
+
 const SCHEMA_RISPOSTA = {
   type: "object",
   properties: {
+    tipo: { type: "string", enum: ["etichetta", "scontrino"], description: "etichetta di prezzo (scaffale o prodotto) o scontrino della spesa" },
+    righe: {
+      type: "array",
+      description: "solo per lo scontrino: un elemento per ogni prodotto comprato. Niente sconti, cauzione, totali, sacchetti, pagamento o righe che non sono prodotti",
+      items: {
+        type: "object",
+        properties: {
+          testo: { type: "string", description: "la riga com'e' scritta sullo scontrino" },
+          prodotto: { type: "string", description: "se e' lo stesso articolo di uno dei prodotti dati, il suo nome esatto; altrimenti un nome breve in italiano, al massimo 4 parole, come in una lista della spesa" },
+          esistente: { type: "boolean", description: "true se prodotto e' uno dei nomi dati" },
+          prezzo: { type: "number", description: "prezzo di un pezzo in euro, senza sconti (per '2 x 1,29' e' 1.29); per la roba pesata il totale della riga" },
+          ...CAMPI_PREZZO,
+          categoria: { type: "string", description: "una delle categorie date, quella piu' adatta; vuoto se nessuna va bene" }
+        },
+        required: ["testo", "prodotto", "esistente", "prezzo", "quantita", "unita", "prezzo_unitario", "categoria"]
+      }
+    },
     prodotto: { type: "string", description: "nome breve del prodotto in italiano, al massimo 4 parole (traduci se l'etichetta e' in un'altra lingua), come in una lista della spesa: cosa e', piu' la marca solo se conta; niente elenchi di gusti, peso o descrizioni (es. 'Yogurt greco Pam', 'Succo ananas mango'); vuoto se non si legge" },
-    prezzo: { type: "number", description: "il prezzo grande della confezione in euro, senza cauzione o vuoto a rendere (Statiegeld, Pfand); 0 se non si legge" },
-    quantita: { type: "number", description: "peso, volume o numero di pezzi della confezione come scritto sull'etichetta (es. 500 per '500ml'); 0 se non c'e'" },
-    unita: { type: "string", enum: ["g", "kg", "ml", "cl", "l", "pz", "nessuna"], description: "l'unita' della quantita ('nessuna' se non c'e')" },
-    prezzo_unitario: { type: "number", description: "il prezzo al kg o al litro se e' stampato sull'etichetta (es. 3.96 per '1 L = 3.96'); 0 se non c'e'" },
-    store: { type: "string", description: "il negozio, se si capisce dall'etichetta; preferisci uno dei nomi dati. Vuoto se non si capisce" },
+    prezzo: { type: "number", description: "solo etichetta: il prezzo grande della confezione in euro, senza cauzione o vuoto a rendere (Statiegeld, Pfand); 0 se non si legge" },
+    ...CAMPI_PREZZO,
+    store: { type: "string", description: "il negozio, se si capisce (per lo scontrino dall'intestazione); preferisci uno dei nomi dati. Vuoto se non si capisce" },
     categoria: { type: "string", description: "una delle categorie date, quella piu' adatta al prodotto; vuoto se nessuna va bene" }
   },
-  required: ["prodotto", "prezzo", "quantita", "unita", "prezzo_unitario", "store", "categoria"]
+  required: ["tipo", "righe", "prodotto", "prezzo", "quantita", "unita", "prezzo_unitario", "store", "categoria"]
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -61,10 +84,35 @@ export function prezzoDaListino(prezzo: number, quantita: number, unita: string,
   return prezzo > 0 ? `${euro(prezzo)}€` : "";
 }
 
+const prezzoDi = (letto: Record<string, unknown>) => prezzoDaListino(Number(letto.prezzo) || 0,
+  Number(letto.quantita) || 0, String(letto.unita || ""), Number(letto.prezzo_unitario) || 0);
+
+// La risposta per il sito, a partire da quello che ha letto Gemini
+export function rispostaDaLettura(letto: Record<string, any>) {
+  const storeName = String(letto.store || "").trim();
+  if (letto.tipo === "scontrino") {
+    const righe = (Array.isArray(letto.righe) ? letto.righe : []).map((riga: Record<string, unknown>) => ({
+      testo: String(riga.testo || "").trim(),
+      prodotto: String(riga.prodotto || "").trim(),
+      esistente: Boolean(riga.esistente),
+      price: prezzoDi(riga),
+      categoryName: String(riga.categoria || "").trim()
+    }));
+    return { tipo: "scontrino", storeName, righe };
+  }
+  return {
+    tipo: "etichetta",
+    product: String(letto.prodotto || "").trim(),
+    price: prezzoDi(letto),
+    storeName,
+    categoryName: String(letto.categoria || "").trim()
+  };
+}
+
 function nomi(valore: FormDataEntryValue | null) {
   try {
     const lista = JSON.parse(String(valore || "[]"));
-    return Array.isArray(lista) ? lista.map(String).filter(Boolean).slice(0, 200) : [];
+    return Array.isArray(lista) ? lista.map(String).filter(Boolean).slice(0, 1000) : [];
   } catch {
     return [];
   }
@@ -119,10 +167,13 @@ Deno.serve(async (request) => {
 
     const categorie = nomi(formData.get("categorie"));
     const store = nomi(formData.get("store"));
+    const prodotti = nomi(formData.get("prodotti"));
     const istruzioni = [
-      "E' la foto di un'etichetta di prezzo (scaffale o prodotto) in un supermercato. Leggi i dati per un listino prezzi personale.",
+      "E' la foto di un'etichetta di prezzo (scaffale o prodotto) o di uno scontrino della spesa. Leggi i dati per un listino prezzi personale.",
+      "Etichetta: compila prodotto, prezzo, quantita, unita, prezzo_unitario; righe vuoto. Scontrino: compila righe e store; gli altri campi vuoti o 0.",
       categorie.length ? `Categorie possibili: ${categorie.join(", ")}.` : "",
-      store.length ? `Negozi gia' nel listino: ${store.join(", ")}.` : ""
+      store.length ? `Negozi gia' nel listino: ${store.join(", ")}.` : "",
+      prodotti.length ? `Prodotti gia' nel listino: ${prodotti.join(", ")}.` : ""
     ].filter(Boolean).join("\n");
 
     const risposta = await chiediAGemini(JSON.stringify({
@@ -132,14 +183,7 @@ Deno.serve(async (request) => {
       ] }],
       generationConfig: { responseMimeType: "application/json", responseSchema: SCHEMA_RISPOSTA, temperature: 0 }
     }));
-    const letto = JSON.parse(risposta.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
-
-    return jsonResponse({
-      product: String(letto.prodotto || "").trim(),
-      price: prezzoDaListino(Number(letto.prezzo) || 0, Number(letto.quantita) || 0, String(letto.unita || ""), Number(letto.prezzo_unitario) || 0),
-      storeName: String(letto.store || "").trim(),
-      categoryName: String(letto.categoria || "").trim()
-    });
+    return jsonResponse(rispostaDaLettura(JSON.parse(risposta.candidates?.[0]?.content?.parts?.[0]?.text || "{}")));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Errore inatteso durante l'analisi.";
     return jsonResponse({ error: message }, 502);
