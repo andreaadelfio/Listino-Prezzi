@@ -6,14 +6,14 @@
 // Richiesta: POST multipart con "image" (la foto) e, facoltativi, "categorie", "store" e "prodotti"
 // (JSON con i nomi gia' presenti nel listino, cosi' Gemini sceglie fra quelli invece di inventarne).
 //
-// Secret: GEMINI_API_KEY (lo stesso di MyBody, che sta nello stesso progetto Supabase); facoltativi
-// GEMINI_MODEL e GEMINI_RISERVA, come in MyBody.
+// Secret: GEMINI_API_KEY (lo stesso di MyBody, che sta nello stesso progetto Supabase).
 
 declare const Deno: { serve: (h: (r: Request) => Promise<Response>) => void; env: { get: (k: string) => string | undefined } };
 
-// Come MyBody: prima Flash-Lite (veloce), poi il Flash piu' recente se il primo non risponde
-const MODELLO_PREDEFINITO = "gemini-3.5-flash-lite";
-const RISERVA_PREDEFINITA = "gemini-flash-latest";
+// Prima il Flash piu' recente: abbina meglio le righe abbreviate dello scontrino ai prodotti (con
+// Flash-Lite "SALVASLIP" diventava "Salviette umide"); Flash-Lite resta di riserva. Nome fisso:
+// va aggiornato quando Google lo ritira.
+const MODELLI = ["gemini-flash-latest", "gemini-3.5-flash-lite"];
 // Uno scontrino lungo richiede piu' lettura: 25 secondi a modello, il sito ne aspetta 60
 const TEMPO_GEMINI = 25 * 1000;
 
@@ -24,7 +24,7 @@ const corsHeaders = {
 };
 
 const CAMPI_PREZZO = {
-  quantita: { type: "number", description: "peso, volume o numero di pezzi della confezione come scritto (es. 500 per '500ml', 0.532 per '0,532 kg' della roba pesata); 0 se non c'e'" },
+  quantita: { type: "number", description: "peso, volume o numero di pezzi solo se e' scritto (es. 500 per '500ml', 400 per 'G400', 500 per '250GX2', 0.532 per '0,532 kg' della roba pesata); 0 se non e' scritto, senza indovinare" },
   unita: { type: "string", enum: ["g", "kg", "ml", "cl", "l", "pz", "nessuna"], description: "l'unita' della quantita ('nessuna' se non c'e')" },
   prezzo_unitario: { type: "number", description: "il prezzo al kg o al litro se e' stampato (es. 3.96 per '1 L = 3.96', 1.79 per '0,532 kg x 1,79 €/kg'); 0 se non c'e'" }
 };
@@ -40,8 +40,8 @@ const SCHEMA_RISPOSTA = {
         type: "object",
         properties: {
           testo: { type: "string", description: "la riga com'e' scritta sullo scontrino" },
-          prodotto: { type: "string", description: "se e' lo stesso articolo di uno dei prodotti dati, il suo nome esatto; altrimenti un nome breve in italiano, al massimo 4 parole, come in una lista della spesa" },
-          esistente: { type: "boolean", description: "true se prodotto e' uno dei nomi dati" },
+          prodotto: { type: "string", description: "il nome esatto di uno dei prodotti dati solo se e' lo stesso articolo (stesso tipo e, se il nome la dice, stessa marca); altrimenti un nome breve in italiano, al massimo 4 parole, che dica cos'e' (es. 'Filetti di sgombro'), mai il nome di una categoria" },
+          esistente: { type: "boolean", description: "true solo se prodotto e' uno dei nomi dati; nel dubbio false" },
           prezzo: { type: "number", description: "prezzo di un pezzo in euro, senza sconti (per '2 x 1,29' e' 1.29); per la roba pesata il totale della riga" },
           ...CAMPI_PREZZO,
           categoria: { type: "string", description: "una delle categorie date, quella piu' adatta; vuoto se nessuna va bene" }
@@ -120,10 +120,8 @@ function nomi(valore: FormDataEntryValue | null) {
 
 // Il primo modello che risponde; quota finita, modello ritirato, sovraccarico o lentezza: il prossimo
 async function chiediAGemini(richiesta: string) {
-  const modelli = [Deno.env.get("GEMINI_MODEL") || MODELLO_PREDEFINITO,
-    ...(Deno.env.get("GEMINI_RISERVA") || RISERVA_PREDEFINITA).split(",").map((m) => m.trim()).filter(Boolean)];
   const errori: string[] = [];
-  for (const modello of modelli) {
+  for (const modello of MODELLI) {
     let gemini: Response;
     try {
       gemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modello}:generateContent`, {
@@ -171,6 +169,7 @@ Deno.serve(async (request) => {
     const istruzioni = [
       "E' la foto di un'etichetta di prezzo (scaffale o prodotto) o di uno scontrino della spesa. Leggi i dati per un listino prezzi personale.",
       "Etichetta: compila prodotto, prezzo, quantita, unita, prezzo_unitario; righe vuoto. Scontrino: compila righe e store; gli altri campi vuoti o 0.",
+      "Scontrino: abbina una riga a un prodotto dato solo se e' lo stesso articolo, altrimenti e' nuovo; per un prodotto nuovo usa un nome che dica cos'e', mai il nome di una categoria; peso o volume solo se e' scritto sulla riga, senza indovinare.",
       categorie.length ? `Categorie possibili: ${categorie.join(", ")}.` : "",
       store.length ? `Negozi gia' nel listino: ${store.join(", ")}.` : "",
       prodotti.length ? `Prodotti gia' nel listino: ${prodotti.join(", ")}.` : ""

@@ -1166,7 +1166,8 @@ td.entry-actions-cell {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     "name check"
-    "detail check";
+    "detail check"
+    "source check";
   align-items: center;
   column-gap: 0.6rem;
   min-height: 3rem;
@@ -1176,6 +1177,8 @@ td.entry-actions-cell {
 
 .receipt-line-name { grid-area: name; font-weight: 600; }
 .receipt-line-detail { grid-area: detail; font-size: 0.88rem; color: var(--ink-soft); }
+/* La riga com'e' scritta sullo scontrino, per controllare l'abbinamento */
+.receipt-line-source { grid-area: source; font-family: "SFMono-Regular", "Cascadia Code", "Fira Code", "Courier New", monospace; font-size: 0.75rem; color: var(--ink-soft); }
 .receipt-line .row-selection-checkbox { grid-area: check; width: 1.4rem; min-height: 1.4rem; }
 
 .receipt-line-skipped .receipt-line-name {

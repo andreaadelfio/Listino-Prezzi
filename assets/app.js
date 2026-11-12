@@ -752,22 +752,25 @@ function renderReceiptDialog() {
   };
 
   elements.receiptLines.innerHTML = [
-    section("Aggiornati", classified.updated, ({ row, price }, index) => `
+    section("Aggiornati", classified.updated, ({ testo, row, price }, index) => `
       <label class="receipt-line">
         <span class="receipt-line-name">${escapeHtml(row.prodotto)}</span>
         <span class="receipt-line-detail">${escapeHtml(formatPriceText(row.prezzo))} → <strong>${escapeHtml(formatPriceText(price))}</strong></span>
+        <span class="receipt-line-source">${escapeHtml(testo)}</span>
         ${checkbox(`updated-${index}`)}
       </label>`),
-    section("Nuovi", classified.added, ({ prodotto, price, categoryName }, index) => `
+    section("Nuovi", classified.added, ({ testo, prodotto, price, categoryName }, index) => `
       <label class="receipt-line">
         <span class="receipt-line-name">${escapeHtml(prodotto)}</span>
         <span class="receipt-line-detail"><strong>${escapeHtml(formatPriceText(price))}</strong> ${categoryLabel(categoryName)}</span>
+        <span class="receipt-line-source">${escapeHtml(testo)}</span>
         ${checkbox(`added-${index}`)}
       </label>`),
     section("Non usati", classified.skipped, ({ testo, prodotto, reason }) => `
       <div class="receipt-line receipt-line-skipped">
         <span class="receipt-line-name">${escapeHtml(prodotto || testo)}</span>
         <span class="receipt-line-detail">${escapeHtml(reason)}</span>
+        <span class="receipt-line-source">${escapeHtml(testo)}</span>
       </div>`)
   ].join("");
   updateReceiptSaveButton();

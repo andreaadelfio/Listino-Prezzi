@@ -27,9 +27,9 @@ articolo; il prezzo e' quello di un pezzo senza sconti; sconti, cauzione, totali
 - `GEMINI_API_KEY`: la chiave Gemini. E' la stessa di MyBody, che sta nello stesso progetto
   Supabase (MyFinance, `fvhzmkvqizfnbgxexdgu`): i secret valgono per tutte le funzioni del progetto,
   quindi non va impostata di nuovo.
-- Facoltativi, condivisi con MyBody: `GEMINI_MODEL` (primo modello, predefinito
-  `gemini-3.5-flash-lite`) e `GEMINI_RISERVA` (modelli di riserva separati da virgole, predefinito
-  `gemini-flash-latest`), provati se il primo ha finito la quota, e' sovraccarico o non risponde.
+- Modelli: prima `gemini-flash-latest` (abbina meglio le righe abbreviate degli scontrini), poi
+  `gemini-3.5-flash-lite` se il primo ha finito la quota, e' sovraccarico o non risponde. I nomi
+  stanno in `MODELLI` nella funzione.
 
 ### Pubblicazione
 

@@ -43,13 +43,13 @@ test("prezzo_vecchio_ignoto", () => {
 test("nuovo_prodotto", () => {
   const { added } = classifyReceiptLines(
     [riga("Passata di pomodoro", "0,89€", { esistente: false, categoryName: "Verdura" })], STORE, rows);
-  assert.deepEqual(added, [{ prodotto: "Passata di pomodoro", price: "0,89€", categoryName: "Verdura" }]);
+  assert.deepEqual(added, [{ testo: "PASSATA DI POMODORO", prodotto: "Passata di pomodoro", price: "0,89€", categoryName: "Verdura" }]);
 });
 
 test("esistente_in_altro_store", () => {
   const { added, updated } = classifyReceiptLines([riga("Latte intero", "1,09€", { categoryName: "Bevande" })], STORE, rows);
   assert.equal(updated.length, 0);
-  assert.deepEqual(added, [{ prodotto: "Latte intero", price: "1,09€", categoryName: "Latte e derivati" }]);
+  assert.deepEqual(added, [{ testo: "LATTE INTERO", prodotto: "Latte intero", price: "1,09€", categoryName: "Latte e derivati" }]);
 });
 
 test("esistente_ma_nome_sconosciuto", () => {
@@ -85,4 +85,13 @@ test("motivo_con_prezzi_formattati", () => {
   const { skipped } = classifyReceiptLines([riga("Aglio", "2,10€")], STORE,
     [{ id: 9, prodotto: "Aglio", retailer_id: 6, prezzo: "12.38€/kg", categoria: "Verdura" }]);
   assert.equal(skipped[0].reason, "hai 12,38€/kg, scontrino 2,10€");
+});
+
+test("testo_dello_scontrino_per_controllare", () => {
+  const { updated, added } = classifyReceiptLines([
+    riga("Mozzarella", "1,29€", { testo: "MOZZ.FIOR.LATTE" }),
+    riga("Filetti di sgombro", "1,41€", { testo: "FILETTI DI SGOMBRO P", esistente: false })
+  ], STORE, rows);
+  assert.equal(updated[0].testo, "MOZZ.FIOR.LATTE");
+  assert.equal(added[0].testo, "FILETTI DI SGOMBRO P");
 });

@@ -13,8 +13,10 @@ writeFileSync(file, stripTypeScriptTypes(readFileSync(sorgente, "utf8")));
 let handler;
 let lettura = {};
 let testoInviato = "";
+let modelli = [];
 globalThis.Deno = { serve: (h) => { handler = h; }, env: { get: (k) => ({ GEMINI_API_KEY: "finta" })[k] } };
-globalThis.fetch = async (_url, init) => {
+globalThis.fetch = async (url, init) => {
+  modelli.push(String(url).split("/models/")[1]);
   testoInviato = JSON.parse(init.body).contents[0].parts[1].text;
   return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(lettura) }] } }] }));
 };
@@ -73,4 +75,17 @@ test("prezzoDaListino_casi", () => {
     [[0, 0, "", 0], ""]
   ];
   for (const [argomenti, atteso] of casi) assert.equal(prezzoDaListino(...argomenti), atteso, String(argomenti));
+});
+
+test("prima_flash_poi_flash_lite", async () => {
+  modelli = [];
+  await chiama();
+  assert.equal(modelli[0], "gemini-flash-latest:generateContent");
+});
+
+test("istruzioni_severe_sullo_scontrino", async () => {
+  await chiama({ prodotti: ["Pasta penne rigate De Cecco"] });
+  assert.match(testoInviato, /stesso articolo/);
+  assert.match(testoInviato, /mai il nome di una categoria/);
+  assert.match(testoInviato, /solo se e' scritt/);
 });
