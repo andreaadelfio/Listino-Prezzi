@@ -1,4 +1,4 @@
-const CACHE_NAME = "listino-prezzi-shell-v7";
+const CACHE_NAME = "listino-prezzi-shell-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -60,7 +60,10 @@ self.addEventListener("fetch", (event) => {
     const cachedResponse = await cache.match(cacheKey);
 
     try {
-      const networkResponse = await fetch(request);
+      // "no-cache": il browser ricontrolla col server (304 se uguale) invece di usare una copia
+      // vecchia dalla sua cache; i moduli di assets/app/ non hanno ?v= e devono essere tutti della
+      // stessa versione. Le richieste di navigazione non si possono copiare con altre opzioni.
+      const networkResponse = await fetch(request.mode === "navigate" ? request : new Request(request, { cache: "no-cache" }));
       if (networkResponse.ok) {
         await cache.put(cacheKey, networkResponse.clone());
       }

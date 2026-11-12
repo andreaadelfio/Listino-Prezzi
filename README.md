@@ -74,5 +74,11 @@ Il pulsante fotocamera del form legge la foto di un'etichetta di prezzo con **Ge
 3. La funzione restituisce `product`, `price` (es. `1,49€` o `12,38€/kg`), `storeName`, `categoryName`.
 4. Il form viene precompilato, ma il salvataggio resta manuale.
 
+Lo stesso pulsante legge anche gli **scontrini** (lo capisce Gemini): si apre una finestrella con i
+prezzi aggiornati (vecchio → nuovo), i prodotti nuovi e le righe non usate con il motivo. Si
+aggiorna solo un prodotto gia' presente in quello Store con la stessa unita' di prezzo (€ con €,
+€/kg con €/kg); tutte le righe partono spuntate e "Salva" scrive solo quelle lasciate spuntate.
+La regola sta in `assets/app/receipt.js` (test: `make test`).
+
 `assets/config.js` ha l'indirizzo della funzione (`labelAiEndpoint`) e il limite della foto
 (`labelAiMaxFileSizeMb`). Pubblicazione e secret: [supabase/functions/README.md](supabase/functions/README.md).

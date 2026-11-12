@@ -80,3 +80,9 @@ test("prezzo_vuoto", () => {
   assert.equal(skipped[0].reason, "prezzo non letto");
   assert.deepEqual([updated, added], [[], []]);
 });
+
+test("motivo_con_prezzi_formattati", () => {
+  const { skipped } = classifyReceiptLines([riga("Aglio", "2,10€")], STORE,
+    [{ id: 9, prodotto: "Aglio", retailer_id: 6, prezzo: "12.38€/kg", categoria: "Verdura" }]);
+  assert.equal(skipped[0].reason, "hai 12,38€/kg, scontrino 2,10€");
+});

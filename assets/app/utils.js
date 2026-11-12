@@ -36,6 +36,16 @@ export function parsePriceText(priceText) {
   };
 }
 
+// Il prezzo come lo mostra la tabella, in una riga di testo: "3.4€" -> "3,40€", "12.38€/kg" -> "12,38€/kg"
+export function formatPriceText(priceText) {
+  const { value, unit } = parsePriceText(priceText);
+  if (typeof value !== "number") {
+    return String(priceText || "");
+  }
+  const formattedValue = value.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${formattedValue}€${unit ? `/${unit}` : ""}`;
+}
+
 export function formatPriceForTable(priceText) {
   const { value, unit } = parsePriceText(priceText);
   if (value === null) {

@@ -8,11 +8,13 @@ import {
   TABLE_COLUMN_COUNT
 } from "./app/constants.js";
 import { createProductGroupsSelector } from "./app/groups.js";
+import { classifyReceiptLines } from "./app/receipt.js";
 import { elements, state } from "./app/store.js";
 import {
   compareTextValues,
   escapeHtml,
   focusWithoutTouchKeyboard,
+  formatPriceText,
   formatPriceForTable,
   getProductAlphabetLetter,
   getRowQuantityValue,
@@ -676,6 +678,154 @@ function applyLabelExtractionToForm(extraction) {
   focusWithoutTouchKeyboard(elements.productInput);
 }
 
+// I campi del prezzo come li salva il database
+function getPricePayload(prezzo) {
+  const parsedPrice = parsePriceText(prezzo);
+  return {
+    prezzo,
+    prezzo_valore: typeof parsedPrice.value === "number" ? parsedPrice.value : null,
+    prezzo_unita: parsedPrice.unit
+  };
+}
+
+// --- Scontrino: finestrella con le righe aggiornate, nuove e non usate, da confermare ---
+function openReceiptDialog(extraction) {
+  const righe = Array.isArray(extraction?.righe) ? extraction.righe : [];
+  if (!righe.length) {
+    throw new Error("Non ho trovato prodotti in questo scontrino.");
+  }
+
+  const store = findStoreByName(extraction.storeName);
+  state.receipt = { righe, storeId: store ? String(store.id) : "", storeName: store?.name || "", askStore: !store, classified: null };
+  classifyReceipt();
+
+  const { classified } = state.receipt;
+  if (classified && !classified.updated.length && !classified.added.length) {
+    const motivi = classified.skipped.map((riga) => `${riga.prodotto} (${riga.reason})`).join(", ");
+    state.receipt = null;
+    setLabelPhotoStatus(`Scontrino ${store.name}: niente da aggiornare. ${motivi}`, "neutral");
+    showFeedback("Nessun prezzo da aggiornare in questo scontrino.", "error");
+    return;
+  }
+
+  setLabelPhotoStatus("", "neutral");
+  // Store non riconosciuto: si sceglie fra quelli esistenti (senza Store non si salva)
+  elements.receiptStoreSelect.classList.toggle("hidden", !state.receipt.askStore);
+  elements.receiptStoreSelect.innerHTML = `<option value="">Di quale Store e' lo scontrino?</option>${state.Stores
+    .map((Store) => `<option value="${Store.id}">${escapeHtml(Store.name)}</option>`).join("")}`;
+  renderReceiptDialog();
+  elements.receiptDialog?.showModal();
+}
+
+function classifyReceipt() {
+  const receipt = state.receipt;
+  receipt.classified = receipt.storeId ? classifyReceiptLines(receipt.righe, receipt.storeId, state.rows) : null;
+}
+
+function handleReceiptStoreChange() {
+  const store = state.Stores.find((Store) => String(Store.id) === elements.receiptStoreSelect.value);
+  state.receipt.storeId = store ? String(store.id) : "";
+  state.receipt.storeName = store?.name || "";
+  classifyReceipt();
+  renderReceiptDialog();
+}
+
+function renderReceiptDialog() {
+  const { storeName, classified } = state.receipt;
+  elements.receiptTitle.textContent = storeName ? `Scontrino ${storeName}` : "Scontrino";
+
+  if (!classified) {
+    elements.receiptLines.innerHTML = `<p class="field-help">Scegli lo Store per vedere i prezzi.</p>`;
+    updateReceiptSaveButton();
+    return;
+  }
+
+  const checkbox = (key) => `<input type="checkbox" class="row-selection-checkbox" data-receipt-line="${key}" checked>`;
+  const section = (title, items, renderItem) => items.length ? `
+    <section class="receipt-section">
+      <p class="eyebrow">${title} (${items.length})</p>
+      ${items.map(renderItem).join("")}
+    </section>` : "";
+  const categoryLabel = (name) => {
+    const category = findCategoryByName(name);
+    return escapeHtml(category ? getCategoryDisplayName(category) : name);
+  };
+
+  elements.receiptLines.innerHTML = [
+    section("Aggiornati", classified.updated, ({ row, price }, index) => `
+      <label class="receipt-line">
+        <span class="receipt-line-name">${escapeHtml(row.prodotto)}</span>
+        <span class="receipt-line-detail">${escapeHtml(formatPriceText(row.prezzo))} → <strong>${escapeHtml(formatPriceText(price))}</strong></span>
+        ${checkbox(`updated-${index}`)}
+      </label>`),
+    section("Nuovi", classified.added, ({ prodotto, price, categoryName }, index) => `
+      <label class="receipt-line">
+        <span class="receipt-line-name">${escapeHtml(prodotto)}</span>
+        <span class="receipt-line-detail"><strong>${escapeHtml(formatPriceText(price))}</strong> ${categoryLabel(categoryName)}</span>
+        ${checkbox(`added-${index}`)}
+      </label>`),
+    section("Non usati", classified.skipped, ({ testo, prodotto, reason }) => `
+      <div class="receipt-line receipt-line-skipped">
+        <span class="receipt-line-name">${escapeHtml(prodotto || testo)}</span>
+        <span class="receipt-line-detail">${escapeHtml(reason)}</span>
+      </div>`)
+  ].join("");
+  updateReceiptSaveButton();
+}
+
+function getCheckedReceiptLines() {
+  const checked = new Set([...elements.receiptLines.querySelectorAll("input[data-receipt-line]:checked")]
+    .map((input) => input.dataset.receiptLine));
+  const { classified } = state.receipt;
+  return {
+    updated: (classified?.updated || []).filter((_, index) => checked.has(`updated-${index}`)),
+    added: (classified?.added || []).filter((_, index) => checked.has(`added-${index}`))
+  };
+}
+
+function updateReceiptSaveButton() {
+  if (!state.receipt) return;
+  const { updated, added } = getCheckedReceiptLines();
+  const count = updated.length + added.length;
+  elements.receiptSaveButton.textContent = `Salva ${count}`;
+  elements.receiptSaveButton.disabled = !state.receipt.storeId || count === 0;
+}
+
+async function handleReceiptSave() {
+  const receipt = state.receipt;
+  if (!receipt?.storeId || !state.currentOwner) return;
+  const { updated, added } = getCheckedReceiptLines();
+
+  elements.receiptSaveButton.disabled = true;
+  elements.receiptSaveButton.textContent = "Salvataggio...";
+  const results = await Promise.all([
+    ...updated.map(({ row, price }) => state.supabaseClient
+      .from("listino_prezzi_raw")
+      .update(getPricePayload(price))
+      .eq("id", row.id)
+      .eq("owner", state.currentOwner)),
+    added.length ? state.supabaseClient.from("listino_prezzi_raw").insert(added.map(({ prodotto, price, categoryName }) => ({
+      owner: state.currentOwner,
+      prodotto,
+      retailer_id: Number(receipt.storeId),
+      category_id: findCategoryByName(categoryName)?.id ?? null,
+      ...getPricePayload(price)
+    }))) : { error: null }
+  ]);
+
+  // Anche con un errore si chiude e si ricarica: il listino mostra cosa e' stato salvato davvero,
+  // e riprovare non duplica le righe nuove gia' inserite
+  const error = results.find((result) => result.error)?.error;
+  elements.receiptDialog.close();
+  await refreshData();
+  if (error) {
+    showFeedback(`Salvataggio scontrino non riuscito del tutto: ${error.message}. Controlla il listino.`, "error");
+    return;
+  }
+  const conta = (n, uno, tanti) => `${n} ${n === 1 ? uno : tanti}`;
+  showFeedback(`Scontrino: ${conta(updated.length, "prezzo aggiornato", "prezzi aggiornati")}, ${conta(added.length, "prodotto aggiunto", "prodotti aggiunti")}.`);
+}
+
 async function requestLabelExtraction(file) {
   const endpoint = getLabelAiEndpoint();
   if (!endpoint) {
@@ -692,9 +842,10 @@ async function requestLabelExtraction(file) {
   // I nomi gia' presenti, cosi' Gemini sceglie fra questi invece di inventarne di nuovi
   formData.append("categorie", JSON.stringify(state.categories.map((category) => category.name)));
   formData.append("store", JSON.stringify(state.Stores.map((Store) => Store.name)));
+  formData.append("prodotti", JSON.stringify([...new Set(state.rows.map((row) => row.prodotto))]));
 
   const controller = new AbortController();
-  const timeoutMs = 30000; // 30s timeout
+  const timeoutMs = 60000; // uno scontrino lungo richiede piu' lettura
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
   let response;
@@ -3124,16 +3275,12 @@ async function handlePriceSubmit(event) {
       return;
     }
 
-    const parsedPrice = parsePriceText(prezzo);
-
     const payload = {
       owner: state.currentOwner,
       prodotto,
       retailer_id: StoreId,
       category_id: categoriaInfo.categoryId,
-      prezzo,
-      prezzo_valore: typeof parsedPrice.value === "number" ? parsedPrice.value : null,
-      prezzo_unita: parsedPrice.unit
+      ...getPricePayload(prezzo)
     };
     
     if (state.editingRowId) {
@@ -3764,12 +3911,15 @@ async function handleLabelPhotoInputChange(event) {
   }
 
   setLabelPhotoBusy(true);
-  setLabelPhotoStatus("Analisi etichetta in corso...", "neutral");
-  showLoadingOverlay("Analisi etichetta...");
+  setLabelPhotoStatus("Analisi foto in corso...", "neutral");
+  showLoadingOverlay("Analisi foto...");
 
   try {
     const extraction = await requestLabelExtraction(file);
-    console.log("Label extraction result:", extraction);
+    if (extraction?.tipo === "scontrino") {
+      openReceiptDialog(extraction);
+      return;
+    }
     if (!hasUsefulLabelExtraction(extraction)) {
       throw new Error("Non sono riuscito a leggere dati affidabili dalla foto.");
     }
@@ -3828,6 +3978,11 @@ function bindEvents() {
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceResetFiltersButton?.addEventListener("click", handlePriceResetFilters);
   elements.priceDeleteButton?.addEventListener("click", () => handleDeleteRow(state.editingRowId));
+  elements.receiptLines?.addEventListener("change", updateReceiptSaveButton);
+  elements.receiptStoreSelect?.addEventListener("change", handleReceiptStoreChange);
+  elements.receiptCancelButton?.addEventListener("click", () => elements.receiptDialog?.close());
+  elements.receiptSaveButton?.addEventListener("click", handleReceiptSave);
+  elements.receiptDialog?.addEventListener("close", () => { state.receipt = null; });
   elements.productInput?.addEventListener("input", handleFormProductInput);
   elements.productInput?.addEventListener("keydown", handleProductInputKeydown);
   elements.priceInput?.addEventListener("input", handleFormPriceInput);

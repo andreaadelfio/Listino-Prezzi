@@ -1,4 +1,4 @@
-import { parsePriceText } from "./utils.js";
+import { formatPriceText, parsePriceText } from "./utils.js";
 
 // Righe di uno scontrino letto da Gemini (supabase/functions/extract-price-label), confrontate con
 // il listino di uno Store. Si aggiorna solo cio' che e' sicuro: stesso prodotto, stessa unita' di
@@ -40,7 +40,7 @@ export function classifyReceiptLines(righe, storeId, rows) {
     }
 
     if (unitaChiave(nelloStore.prezzo) !== unitaChiave(price)) {
-      skipped.push({ testo: riga.testo, prodotto: nelloStore.prodotto, reason: `hai ${nelloStore.prezzo}, scontrino ${price}` });
+      skipped.push({ testo: riga.testo, prodotto: nelloStore.prodotto, reason: `hai ${formatPriceText(nelloStore.prezzo)}, scontrino ${formatPriceText(price)}` });
     } else if (parsePriceText(nelloStore.prezzo).value === parsePriceText(price).value) {
       skipped.push({ testo: riga.testo, prodotto: nelloStore.prodotto, reason: "prezzo uguale" });
     } else {
