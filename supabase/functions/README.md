@@ -10,7 +10,16 @@ risponde:
 { "product": "Yogurt greco Pam", "price": "5,60€/kg", "storeName": "Pam", "categoryName": "Latte e derivati" }
 ```
 
-Il prezzo e' quello al kg o al litro se l'etichetta lo riporta, altrimenti quello della confezione.
+Il prezzo segue il formato del listino. Gemini legge prezzo della confezione (senza cauzione, es.
+Statiegeld), quantita' con unita' e l'eventuale prezzo al kg/litro stampato; la funzione
+(`prezzoDaListino`) ne ricava:
+
+- `3,96€/l` o `9,96€/kg`: quello stampato, oppure calcolato da prezzo e peso/volume
+  (es. 1,98 € per 500 ml);
+- `4,99€/36pz` per le confezioni a pezzi;
+- `1,50€` se peso e volume non ci sono.
+
+Il nome del prodotto viene in italiano anche se l'etichetta e' in un'altra lingua.
 
 ### Modelli e secret
 

@@ -24,12 +24,15 @@ const corsHeaders = {
 const SCHEMA_RISPOSTA = {
   type: "object",
   properties: {
-    prodotto: { type: "string", description: "nome breve del prodotto come lo scriverebbe una persona in una lista della spesa, con la marca solo se conta (es. 'Yogurt greco Pam'); vuoto se non si legge" },
-    prezzo: { type: "string", description: "prezzo nel formato '1,49€' o '12,38€/kg' (unita': kg, l, pz...). Se l'etichetta ha il prezzo al kg o al litro usa quello, altrimenti il prezzo della confezione. Vuoto se non si legge" },
+    prodotto: { type: "string", description: "nome breve del prodotto in italiano (traduci se l'etichetta e' in un'altra lingua) come lo scriverebbe una persona in una lista della spesa, con la marca solo se conta (es. 'Yogurt greco Pam', 'Succo ananas e mango'); vuoto se non si legge" },
+    prezzo: { type: "number", description: "il prezzo grande della confezione in euro, senza cauzione o vuoto a rendere (Statiegeld, Pfand); 0 se non si legge" },
+    quantita: { type: "number", description: "peso, volume o numero di pezzi della confezione come scritto sull'etichetta (es. 500 per '500ml'); 0 se non c'e'" },
+    unita: { type: "string", enum: ["g", "kg", "ml", "cl", "l", "pz", "nessuna"], description: "l'unita' della quantita ('nessuna' se non c'e')" },
+    prezzo_unitario: { type: "number", description: "il prezzo al kg o al litro se e' stampato sull'etichetta (es. 3.96 per '1 L = 3.96'); 0 se non c'e'" },
     store: { type: "string", description: "il negozio, se si capisce dall'etichetta; preferisci uno dei nomi dati. Vuoto se non si capisce" },
     categoria: { type: "string", description: "una delle categorie date, quella piu' adatta al prodotto; vuoto se nessuna va bene" }
   },
-  required: ["prodotto", "prezzo", "store", "categoria"]
+  required: ["prodotto", "prezzo", "quantita", "unita", "prezzo_unitario", "store", "categoria"]
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -43,6 +46,19 @@ function base64(byte: Uint8Array) {
   let testo = "";
   for (let i = 0; i < byte.length; i += 0x8000) testo += String.fromCharCode(...byte.subarray(i, i + 0x8000));
   return btoa(testo);
+}
+
+// Il prezzo come nel listino: al kg o al litro se si conosce peso o volume (quello stampato, se
+// c'e', altrimenti calcolato), "4,99€/36pz" per le confezioni a pezzi, altrimenti quello della confezione
+const IN_KG_O_L: Record<string, [number, string]> = { g: [1000, "kg"], kg: [1, "kg"], ml: [1000, "l"], cl: [100, "l"], l: [1, "l"] };
+const euro = (valore: number) => valore.toFixed(2).replace(".", ",");
+
+export function prezzoDaListino(prezzo: number, quantita: number, unita: string, prezzoUnitario: number) {
+  const misura = IN_KG_O_L[unita];
+  if (misura && prezzoUnitario > 0) return `${euro(prezzoUnitario)}€/${misura[1]}`;
+  if (misura && prezzo > 0 && quantita > 0) return `${euro(prezzo * misura[0] / quantita)}€/${misura[1]}`;
+  if (prezzo > 0 && unita === "pz" && quantita > 1) return `${euro(prezzo)}€/${quantita}pz`;
+  return prezzo > 0 ? `${euro(prezzo)}€` : "";
 }
 
 function nomi(valore: FormDataEntryValue | null) {
@@ -120,7 +136,7 @@ Deno.serve(async (request) => {
 
     return jsonResponse({
       product: String(letto.prodotto || "").trim(),
-      price: String(letto.prezzo || "").replace(/\s+/g, "").trim(),
+      price: prezzoDaListino(Number(letto.prezzo) || 0, Number(letto.quantita) || 0, String(letto.unita || ""), Number(letto.prezzo_unitario) || 0),
       storeName: String(letto.store || "").trim(),
       categoryName: String(letto.categoria || "").trim()
     });
