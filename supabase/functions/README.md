@@ -2,176 +2,33 @@
 
 ## `extract-price-label`
 
-Questa funzione riceve una foto dell'etichetta dal frontend, la invia a OpenAI tramite la `Responses API` e restituisce un JSON con:
+Riceve la foto di un'etichetta di prezzo (campo `image`, multipart) e, facoltativi, i nomi di
+categorie e Store gia' nel listino (`categorie`, `store`, in JSON). La legge con **Gemini** e
+risponde:
 
-- `product`
-- `price`
-- `storeName`
-- `categoryName`
-- `confidence`
-- `notes`
+```json
+{ "product": "Yogurt greco Pam", "price": "5,60€/kg", "storeName": "Pam", "categoryName": "Latte e derivati" }
+```
 
-## Prerequisiti
+Il prezzo e' quello al kg o al litro se l'etichetta lo riporta, altrimenti quello della confezione.
 
-- Devi avere un progetto Supabase gia' creato.
-- Devi avere accesso al dashboard del progetto.
-- Ti serve una chiave OpenAI API, da salvare nei secret Supabase.
+### Modelli e secret
 
-## 1. Installare Supabase CLI
+- `GEMINI_API_KEY`: la chiave Gemini. E' la stessa di MyBody, che sta nello stesso progetto
+  Supabase (MyFinance, `fvhzmkvqizfnbgxexdgu`): i secret valgono per tutte le funzioni del progetto,
+  quindi non va impostata di nuovo.
+- Facoltativi, condivisi con MyBody: `GEMINI_MODEL` (primo modello, predefinito
+  `gemini-3.5-flash-lite`) e `GEMINI_RISERVA` (modelli di riserva separati da virgole, predefinito
+  `gemini-flash-latest`), provati se il primo ha finito la quota, e' sovraccarico o non risponde.
 
-Metodo consigliato per questo progetto: eseguire la CLI con `npx`.
-
-Requisito:
-
-- `Node.js 20` o superiore
-
-Verifica:
+### Pubblicazione
 
 ```bash
-node -v
+npx supabase functions deploy extract-price-label --project-ref fvhzmkvqizfnbgxexdgu --no-verify-jwt
 ```
 
-Uso rapido senza installazione globale:
+Il sito la chiama con la sola chiave publishable nell'header `apikey`, per questo `--no-verify-jwt`.
+Va pubblicata insieme al sito: il sito vecchio si aspettava il testo grezzo dell'OCR (`notes`),
+quello nuovo i campi qui sopra.
 
-```bash
-npx supabase --help
-```
-
-Se vuoi aggiungerla al progetto come dipendenza di sviluppo:
-
-```bash
-npm install --save-dev supabase
-```
-
-Poi i comandi diventano:
-
-```bash
-npx supabase login
-```
-
-Nota importante:
-
-- La documentazione Supabase indica che `npm install -g supabase` non e' supportato.
-
-## 2. Collegare questa cartella al tuo progetto Supabase
-
-Fai login:
-
-```bash
-npx supabase login
-```
-
-Visualizza i progetti disponibili e copia il `project ref` corretto:
-
-```bash
-npx supabase projects list
-```
-
-Collega il repository locale al progetto remoto:
-
-```bash
-npx supabase link --project-ref jbpdyxztnljbfowrnsih
-```
-
-Se vuoi controllare che il file della function sia nel posto giusto, deve esistere questo percorso:
-
-```text
-supabase/functions/extract-price-label/index.ts
-```
-
-## 3. Ottenere una OpenAI API key
-
-Apri la pagina ufficiale delle API key OpenAI:
-
-- https://platform.openai.com/api-keys
-
-Procedura:
-
-1. Accedi con il tuo account OpenAI.
-2. Apri la sezione `API keys`.
-3. Crea una nuova chiave.
-4. Copiala subito e conservala in un posto sicuro.
-
-Importante:
-
-- Non inserirla in `assets/app.js` o `assets/config.js`.
-- Non committarla nel repository.
-- In questo progetto va salvata solo come secret Supabase.
-
-Se vuoi provarla localmente nel terminale, puoi anche esportarla come variabile ambiente:
-
-```bash
-export OPENAI_API_KEY="la_tua_chiave"
-```
-
-## 4. Salvare la chiave OpenAI nei secret Supabase
-
-Una volta ottenuta la chiave, salvala nel progetto Supabase:
-
-```bash
-npx supabase secrets set OPENAI_API_KEY=la_tua_chiave
-```
-
-Puoi anche impostare il modello usato dalla function.
-
-Default consigliato per questo flusso:
-
-```bash
-npx supabase secrets set LABEL_EXTRACTION_MODEL=gpt-5-mini
-```
-
-Se vuoi piu' accuratezza e accetti costi maggiori:
-
-```bash
-npx supabase secrets set LABEL_EXTRACTION_MODEL=gpt-5.5
-```
-
-## 5. Pubblicare la function nel progetto
-
-Deploy della sola function foto-etichetta:
-
-```bash
-npx supabase functions deploy extract-price-label
-```
-
-Se il progetto non e' gia' linkato, puoi anche specificare il project ref direttamente:
-
-```bash
-npx supabase functions deploy extract-price-label --project-ref fvhzmkvqizfnbgxexdgu
-npx supabase secrets set OCR_SPACE_API_KEY=... --project-ref fvhzmkvqizfnbgxexdgu
-```
-
-`fvhzmkvqizfnbgxexdgu` e' il progetto MyFinance, dove il Listino sta dal 2026-10 (prima era
-`jbpdyxztnljbfowrnsih`). La function usa il secret `OCR_SPACE_API_KEY`. Il sito la chiama con la
-sola chiave publishable nell'header `apikey`: se nel vecchio progetto "Verify JWT" era disattivato
-(Dashboard -> Edge Functions -> extract-price-label), pubblicala con `--no-verify-jwt`.
-
-## 6. Verificare che sia online
-
-L'endpoint finale sara' di questo tipo:
-
-```text
-https://<project_ref>.supabase.co/functions/v1/extract-price-label
-```
-
-Nel tuo progetto frontend questo endpoint e' gia' configurato in `assets/config.js`.
-
-## 7. Flusso completo consigliato
-
-1. Verifica di avere `Node.js 20+`.
-2. Esegui `npx supabase login`.
-3. Esegui `npx supabase projects list`.
-4. Esegui `npx supabase link --project-ref ...`.
-5. Crea la chiave OpenAI da `https://platform.openai.com/api-keys`.
-6. Salva il secret con `npx supabase secrets set OPENAI_API_KEY=...`.
-7. Esegui `npx supabase functions deploy extract-price-label`.
-8. Prova il pulsante camera nell'app.
-
-## Riferimenti ufficiali
-
-- Supabase CLI install: https://supabase.com/docs/guides/local-development/cli/getting-started
-- Supabase Edge Functions deploy: https://supabase.com/docs/guides/functions/deploy
-- Supabase Edge Functions overview: https://supabase.com/docs/guides/functions
-- OpenAI quickstart API key: https://developers.openai.com/api/docs/quickstart
-- OpenAI API keys dashboard: https://platform.openai.com/api-keys
-```
+Serve aver fatto una volta `npx supabase login` (Node.js 20+).

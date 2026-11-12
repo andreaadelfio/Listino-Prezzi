@@ -20,6 +20,11 @@ dev:
 		echo "Apri manualmente: http://$(HOST):$(PORT)/index.html"; \
 	fi
 
+# Anteprima mobile senza cache (il sito nel "telefono" su /mobile, si ricarica da solo quando
+# salvi un file), raggiungibile anche dal telefono sulla stessa rete Wi-Fi (Ctrl+C per fermarla)
+dev_mob:
+	python3 dev_server.py 8002 --rete
+
 stop:
 	@if pkill -f "python3 -m http.server $(PORT)" 2>/dev/null; then \
 		echo "Server fermato sulla porta $(PORT)"; \

@@ -84,6 +84,7 @@ export const elements = {
   labelPhotoInput: document.querySelector("#label-photo-input"),
   labelPhotoStatus: document.querySelector("#label-photo-status"),
   priceResetFiltersButton: document.querySelector("#price-reset-filters-button"),
+  priceDeleteButton: document.querySelector("#price-delete-button"),
   priceCancelButton: document.querySelector("#price-cancel-button"),
   alphabetIndexWrap: document.querySelector(".alphabet-index-wrap"),
   alphabetIndex: document.querySelector("#alphabet-index"),

@@ -98,7 +98,8 @@ export function normalizeOwnerKey(value) {
 
 export function normalizeSortKey(value) {
   const normalizedValue = String(value || "").trim().toLowerCase();
-  return SORTABLE_COLUMN_KEYS.includes(normalizedValue) ? normalizedValue : "prodotto";
+  // Le chiavi hanno maiuscole ("Store"): il confronto va fatto in minuscolo su entrambe
+  return SORTABLE_COLUMN_KEYS.find((key) => key.toLowerCase() === normalizedValue) || "prodotto";
 }
 
 export function normalizeSortDirection(value) {

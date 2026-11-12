@@ -233,133 +233,6 @@ function getLabelAiEndpoint() {
   return supabaseUrl ? `${supabaseUrl}/functions/v1/extract-price-label` : "";
 }
 
-// --- Nuove funzioni di parsing OCR spostate dal backend ---
-function normalizePriceValue(value) {
-  if (!value) return "";
-  
-  // Rimuovi valuta e simboli
-  let cleaned = value.replace(/€|EUR/gi, "").trim();
-  
-  // Gestione separatore: se c'è uno spazio tra cifre, o una virgola, converti in punto
-  // Es: "1 49" -> "1.49", "1,49" -> "1.49"
-  cleaned = cleaned.replace(/(\d+)[\s.,]+(\d+)/, "$1.$2");
-  
-  // Se dopo la pulizia abbiamo qualcosa che sembra un numero (es "1.49" o "1")
-  const numericMatch = cleaned.match(/\d+(?:\.\d+)?/);
-  if (numericMatch) {
-    const num = parseFloat(numericMatch[0]);
-    if (!isNaN(num)) {
-      return num.toFixed(2);
-    }
-  }
-  return cleaned;
-}
-
-function cleanProductText(line, priceMatch) {
-  return line
-    .replace(priceMatch, "")
-    .replace(/€|EUR/gi, "")
-    .replace(/\b(kg|g|ml|l|lt|ltr|pz|pezzi|x|\*)\b/gi, "")
-    .replace(/[\s\-–_]{2,}/g, " ")
-    .replace(/[^\p{L}\p{N} ,.'\/]/gu, " ")
-    .replace(/\s+/g, " ").trim();
-}
-
-function isNoiseLine(line) {
-  if (!line || line.length < 2) {
-    return true;
-  }
-
-  const normalized = line.toLowerCase();
-  
-  // Se la riga ha troppi simboli rispetto alle lettere/numeri, è quasi certamente errore OCR
-  const alphanumeric = line.replace(/[^\p{L}\p{N}]/gu, "");
-  if (line.length > 4 && (alphanumeric.length / line.length) < 0.4) {
-    return true;
-  }
-
-  // Righe con troppi slash o caratteri ripetuti (tipico rumore da codici a barre o riflessi)
-  if (/(.)\1{3,}/.test(line) || (line.match(/\//g) || []).length > 3) {
-    return true;
-  }
-
-  return Boolean(
-    normalized.match(/^\d{1,2}[\/:]\d{1,2}(?:[\/:]\d{2,4})?$/)
-    || normalized.match(/^totale\b/)
-    || normalized.match(/^iva\b/)
-    || normalized.match(/^sconto\b/)
-    || normalized.match(/^quantita\b/)
-    || normalized.match(/^prezzo\b/)
-    || normalized.match(/^euro\b/)
-    || normalized.match(/^tel\b/) 
-    || normalized.match(/^codice\b/)
-    || normalized.match(/^data\b/)
-    || normalized.match(/^scadenza\b/)
-  );
-}
-
-function parseOcrText(rawText) {
-  const lines = String(rawText || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const priceRegex = /\d{1,3}[.,\s]\s?\d{2}/;
-  let product = "";
-  let price = "";
-  let bestPriceIndex = -1;
-
-  if (lines.length) {
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (isNoiseLine(line)) continue;
-
-      const match = line.match(priceRegex);
-      if (match) {
-        price = normalizePriceValue(match[0]);
-        bestPriceIndex = i;
-        
-        const cleaned = cleanProductText(line, match[0]);
-        if (cleaned.length > 3) {
-          product = cleaned;
-          break;
-        }
-      }
-    }
-
-    if (price && !product && bestPriceIndex !== -1) {
-      const prev = lines[bestPriceIndex - 1];
-      if (prev && !isNoiseLine(prev) && prev.length > 2) {
-        product = prev;
-      } else {
-        const next = lines[bestPriceIndex + 1];
-        if (next && !isNoiseLine(next) && next.length > 2) {
-          product = next;
-        }
-      }
-    }
-
-    if (!product && !price) {
-      const validLines = lines
-        .filter(l => !isNoiseLine(l) && l.length > 2)
-        .sort((a, b) => b.length - a.length);
-      
-      if (validLines.length > 0) {
-        if (/[a-zA-Z\u00C0-\u017F]{3,}/.test(validLines[0])) {
-          product = validLines[0];
-        }
-      }
-    }
-  }
-
-  return {
-    product: product.trim(),
-    price: price.trim(),
-    categoryName: "",
-    confidence: 0
-  };
-}
-// --- Fine nuove funzioni di parsing OCR ---
 
 function getLabelAiMaxFileSizeBytes() {
   const maxFileSizeMb = Number(window.APP_CONFIG?.labelAiMaxFileSizeMb || 8);
@@ -369,7 +242,8 @@ function getLabelAiMaxFileSizeBytes() {
   return Math.round(normalizedMb * 1024 * 1024);
 }
 
-const OCR_SPACE_MAX_UPLOAD_BYTES = Math.round(1.45 * 1024 * 1024); // 1.45 MB per sicurezza
+// La foto si rimpicciolisce prima dell'invio: sul telefono parte prima e a Gemini basta
+const LABEL_MAX_UPLOAD_BYTES = Math.round(1.45 * 1024 * 1024);
 
 function imageFileToBlob(file, type, quality) {
   return new Promise((resolve) => {
@@ -457,25 +331,22 @@ function getLabelAiHeaders(endpoint) {
   return headers;
 }
 
-// Aggiornata per usare il risultato del parsing locale
+// extraction: {product, price, storeName, categoryName} letti da Gemini (supabase/functions/extract-price-label)
 function buildLabelPhotoSummary(extraction) {
-  const parsed = parseOcrText(extraction?.notes || "");
   const summaryParts = [
-    String(parsed.product || "").trim(),
-    String(parsed.price || "").trim(),
-    String(parsed.categoryName || "").trim()
-  ].filter(Boolean);
+    extraction?.product,
+    extraction?.price,
+    extraction?.storeName,
+    extraction?.categoryName
+  ].map((part) => String(part || "").trim()).filter(Boolean);
 
   return summaryParts.length
-    // Rimosso il suffisso di confidence dato che non viene più calcolato qui
     ? `Foto letta: ${summaryParts.join(" · ")}`
     : "Foto letta, ma con pochi dettagli utili.";
 }
 
-// Aggiornata per usare il risultato del parsing locale
 function hasUsefulLabelExtraction(extraction) {
-  const parsed = parseOcrText(extraction?.notes || "");
-  return Boolean(parsed.product || parsed.price || parsed.categoryName);
+  return Boolean(extraction?.product || extraction?.price);
 }
 
 function setFormSearchValue(value) {
@@ -774,11 +645,9 @@ function applyExtractedCategoryToForm(categoryName) {
 }
 
 function applyLabelExtractionToForm(extraction) {
-  // Ora estraiamo product, price e categoryName dal campo notes
-  const parsed = parseOcrText(extraction?.notes || "");
-  const product = parsed.product;
-  const price = parsed.price;
-  const categoryName = parsed.categoryName; // Potrebbe essere vuoto se non estratto
+  const product = String(extraction?.product || "").trim();
+  const price = String(extraction?.price || "").trim();
+  const categoryName = String(extraction?.categoryName || "").trim();
   if (product && elements.productInput) {
     elements.productInput.value = product;
     state.formSearchTerm = product;
@@ -789,6 +658,10 @@ function applyLabelExtractionToForm(extraction) {
   if (price && elements.priceInput) {
     elements.priceInput.value = price;
     renderPriceInlineSuggestion();
+  }
+
+  if (extraction?.storeName) {
+    applyExtractedStoreToForm(extraction.storeName);
   }
 
   if (categoryName) {
@@ -809,13 +682,16 @@ async function requestLabelExtraction(file) {
     throw new Error("Endpoint AI non configurato.");
   }
 
-  const uploadFile = await compressImageFile(file, OCR_SPACE_MAX_UPLOAD_BYTES);
+  const uploadFile = await compressImageFile(file, LABEL_MAX_UPLOAD_BYTES);
   if (!uploadFile) {
-    throw new Error("Immagine troppo grande per l'elaborazione OCR; usa una foto più leggera.");
+    throw new Error("Immagine troppo grande da analizzare; usa una foto più leggera.");
   }
 
   const formData = new FormData();
-  formData.append("image", uploadFile, uploadFile.name || "label-image"); // L'immagine è l'unico dato necessario
+  formData.append("image", uploadFile, uploadFile.name || "label-image");
+  // I nomi gia' presenti, cosi' Gemini sceglie fra questi invece di inventarne di nuovi
+  formData.append("categorie", JSON.stringify(state.categories.map((category) => category.name)));
+  formData.append("store", JSON.stringify(state.Stores.map((Store) => Store.name)));
 
   const controller = new AbortController();
   const timeoutMs = 30000; // 30s timeout
@@ -3473,6 +3349,17 @@ function handleAlphabetIndexClick(event) {
   scrollToAlphabetLetter(button.dataset.letter || "");
 }
 
+// Sul telefono l'indice si scorre col dito, come nella rubrica: salta alla lettera sotto il dito
+let lastTouchedLetter = "";
+function handleAlphabetIndexTouchMove(event) {
+  const touch = event.touches[0];
+  const button = document.elementFromPoint(touch.clientX, touch.clientY)?.closest("button[data-letter]");
+  if (button && !button.disabled && button.dataset.letter !== lastTouchedLetter) {
+    lastTouchedLetter = button.dataset.letter;
+    scrollToAlphabetLetter(lastTouchedLetter);
+  }
+}
+
 function handleDocumentClick(event) {
   const target = event.target;
   if (!(target instanceof Node)) {
@@ -3940,6 +3827,7 @@ function bindEvents() {
   // Form inserimento/modifica
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceResetFiltersButton?.addEventListener("click", handlePriceResetFilters);
+  elements.priceDeleteButton?.addEventListener("click", () => handleDeleteRow(state.editingRowId));
   elements.productInput?.addEventListener("input", handleFormProductInput);
   elements.productInput?.addEventListener("keydown", handleProductInputKeydown);
   elements.priceInput?.addEventListener("input", handleFormPriceInput);
@@ -3981,6 +3869,7 @@ function bindEvents() {
   // Altri eventi generali
   elements.refreshButton.addEventListener("click", refreshData);
   elements.alphabetIndex?.addEventListener("click", handleAlphabetIndexClick);
+  elements.alphabetIndex?.addEventListener("touchmove", handleAlphabetIndexTouchMove);
 
   document.addEventListener("click", handleDocumentClick);
   document.addEventListener("keydown", handleDocumentKeydown);
