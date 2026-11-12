@@ -114,3 +114,10 @@ export function getProductAlphabetLetter(value) {
 export function compareTextValues(valueA, valueB) {
   return String(valueA || "").localeCompare(String(valueB || ""), "it", { sensitivity: "base" });
 }
+
+// Sul telefono il focus automatico aprirebbe la tastiera sopra le opzioni: lo lascia al tocco dell'utente.
+export function focusWithoutTouchKeyboard(element) {
+  if (element && !window.matchMedia("(pointer: coarse)").matches) {
+    element.focus();
+  }
+}

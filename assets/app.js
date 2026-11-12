@@ -12,6 +12,7 @@ import { elements, state } from "./app/store.js";
 import {
   compareTextValues,
   escapeHtml,
+  focusWithoutTouchKeyboard,
   formatPriceForTable,
   getProductAlphabetLetter,
   getRowQuantityValue,
@@ -799,7 +800,7 @@ function applyLabelExtractionToForm(extraction) {
   }
 
   applyFilters();
-  elements.productInput?.focus();
+  focusWithoutTouchKeyboard(elements.productInput);
 }
 
 async function requestLabelExtraction(file) {
@@ -1253,7 +1254,7 @@ function openOwnerDropdown() {
   state.ownerDropdownOpen = true;
   elements.ownerDropdownButton?.setAttribute("aria-expanded", "true");
   elements.ownerDropdownPanel?.classList.remove("hidden");
-  elements.ownerDropdownSearch?.focus();
+  focusWithoutTouchKeyboard(elements.ownerDropdownSearch);
 }
 
 function renderAlphabetIndex() {
@@ -1732,7 +1733,7 @@ function openStoreDropdown() {
   state.StoreDropdownOpen = true;
   elements.StoreDropdownButton.setAttribute("aria-expanded", "true");
   elements.StoreDropdownPanel.classList.remove("hidden");
-  elements.StoreDropdownSearch.focus();
+  focusWithoutTouchKeyboard(elements.StoreDropdownSearch);
 }
 
 function updateStoreDropdownLabel() {
@@ -1812,7 +1813,7 @@ function openCategoryDropdown() {
   state.categoryDropdownOpen = true;
   elements.categoryDropdownButton.setAttribute("aria-expanded", "true");
   elements.categoryDropdownPanel.classList.remove("hidden");
-  elements.categoryDropdownSearch.focus();
+  focusWithoutTouchKeyboard(elements.categoryDropdownSearch);
 }
 
 function updateCategoryDropdownLabel() {
@@ -2900,7 +2901,7 @@ function openSessionStoreDropdown() {
   state.sessionStoreDropdownOpen = true;
   elements.shoppingSessionButton?.setAttribute("aria-expanded", "true");
   elements.sessionStoreDropdownPanel?.classList.remove("hidden");
-  elements.sessionStoreDropdownSearch?.focus();
+  focusWithoutTouchKeyboard(elements.sessionStoreDropdownSearch);
   renderSessionStoreList();
 }
 
