@@ -24,7 +24,7 @@ const corsHeaders = {
 const SCHEMA_RISPOSTA = {
   type: "object",
   properties: {
-    prodotto: { type: "string", description: "nome breve del prodotto in italiano (traduci se l'etichetta e' in un'altra lingua) come lo scriverebbe una persona in una lista della spesa, con la marca solo se conta (es. 'Yogurt greco Pam', 'Succo ananas e mango'); vuoto se non si legge" },
+    prodotto: { type: "string", description: "nome breve del prodotto in italiano, al massimo 4 parole (traduci se l'etichetta e' in un'altra lingua), come in una lista della spesa: cosa e', piu' la marca solo se conta; niente elenchi di gusti, peso o descrizioni (es. 'Yogurt greco Pam', 'Succo ananas mango'); vuoto se non si legge" },
     prezzo: { type: "number", description: "il prezzo grande della confezione in euro, senza cauzione o vuoto a rendere (Statiegeld, Pfand); 0 se non si legge" },
     quantita: { type: "number", description: "peso, volume o numero di pezzi della confezione come scritto sull'etichetta (es. 500 per '500ml'); 0 se non c'e'" },
     unita: { type: "string", enum: ["g", "kg", "ml", "cl", "l", "pz", "nessuna"], description: "l'unita' della quantita ('nessuna' se non c'e')" },
