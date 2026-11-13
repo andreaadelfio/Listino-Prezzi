@@ -41,7 +41,7 @@ const SCHEMA_RISPOSTA = {
       items: {
         type: "object",
         properties: {
-          testo: { type: "string", description: "la riga com'e' scritta sullo scontrino" },
+          testo: { type: "string", description: "la riga com'e' scritta sullo scontrino, tutta: nome, quantita' e prezzo (es. 'POMODORINI FF G400 2 X 1,39 2,78'); per la roba pesata anche la riga del peso (es. 'ZUCCHINE BIO 0,532 kg x 2,49 EUR/kg 1,32')" },
           prodotto: { type: "string", description: "il nome esatto di uno dei prodotti dati solo se e' lo stesso articolo (stesso tipo e, se il nome la dice, stessa marca); altrimenti un nome breve in italiano, al massimo 4 parole, che dica cos'e' (es. 'Filetti di sgombro'), mai il nome di una categoria" },
           esistente: { type: "boolean", description: "true solo se prodotto e' uno dei nomi dati; nel dubbio false" },
           a_peso: { type: "boolean", description: "true se si confronta al kg: frutta, verdura, carne, pesce, formaggi e altro venduto sfuso o in confezioni di peso variabile" },
