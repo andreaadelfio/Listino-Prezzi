@@ -1232,6 +1232,11 @@ td.entry-actions-cell {
     transform: none;
   }
 
+  /* Il form e' vuoto (i campi lo indicano con form="price-form"): senza box non aggiunge uno spazio sotto la testata */
+  #price-form {
+    display: contents;
+  }
+
   /* Indice alfabetico verticale sul bordo destro */
   .alphabet-index-wrap {
     position: fixed;
@@ -1292,7 +1297,7 @@ td.entry-actions-cell {
     display: flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 0.4rem 0 0.4rem 0.55rem;
+    padding: 0.2rem 0 0.25rem 0.55rem;
     overflow-x: auto;
     scrollbar-width: none;
     background: var(--surface-strong);
@@ -1351,8 +1356,8 @@ td.entry-actions-cell {
       "prod prod prod reset photo"
       "price store cat cat add";
     align-items: center;
-    gap: 0.45rem;
-    padding: 0.5rem 0.4rem;
+    gap: 0.35rem;
+    padding: 0.3rem 0.4rem 0.4rem;
     background: var(--surface-strong);
     box-shadow: inset 0 -1px 0 rgba(31, 42, 36, 0.1);
   }
@@ -1436,8 +1441,8 @@ td.entry-actions-cell {
       "store cat cat sel";
     align-items: center;
     column-gap: 0.4rem;
-    min-height: 4rem;
-    padding: 0.35rem 0 0.35rem 0.55rem;
+    min-height: 3.4rem;
+    padding: 0.25rem 0 0.25rem 0.55rem;
     border-bottom: 1px solid rgba(31, 42, 36, 0.08);
   }
 
@@ -1472,7 +1477,9 @@ td.entry-actions-cell {
     font-weight: 600;
   }
 
+  /* Unita' lunghe (€/650ml, €/pezzo) allargano la cella invece di finire sotto la casella */
   .price-table-cell {
+    grid-template-columns: auto minmax(4.5ch, auto);
     font-size: 0.95rem;
     font-weight: 600;
   }
@@ -1512,9 +1519,9 @@ td.entry-actions-cell {
   .row-Store-cell .icon-button {
     position: static;
     transform: none;
-    width: 1.8rem;
-    min-width: 1.8rem;
-    min-height: 1.8rem;
+    width: 1.6rem;
+    min-width: 1.6rem;
+    min-height: 1.5rem;
     border: 0;
     background: transparent;
     color: var(--ink-soft);
