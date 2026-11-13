@@ -11,11 +11,13 @@
 declare const Deno: { serve: (h: (r: Request) => Promise<Response>) => void; env: { get: (k: string) => string | undefined } };
 
 // Prima il Flash piu' recente: abbina meglio le righe abbreviate dello scontrino ai prodotti (con
-// Flash-Lite "SALVASLIP" diventava "Salviette umide"); Flash-Lite resta di riserva. Nome fisso:
-// va aggiornato quando Google lo ritira.
-const MODELLI = ["gemini-flash-latest", "gemini-3.5-flash-lite"];
-// Uno scontrino lungo richiede piu' lettura: 25 secondi a modello, il sito ne aspetta 60
+// Flash-Lite "SALVASLIP" diventava "Salviette umide"); poi altri modelli di riserva, ognuno con
+// capacita' sua (quando uno e' sovraccarico, 503, gli altri spesso no). Nomi fissi: vanno
+// aggiornati quando Google li ritira (elenco: https://aistudio.google.com/docs/models).
+const MODELLI = ["gemini-flash-latest", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"];
+// Uno scontrino lungo richiede piu' lettura: al massimo 25 secondi a modello e 55 in tutto, il sito ne aspetta 60
 const TEMPO_GEMINI = 25 * 1000;
+const TEMPO_TOTALE = 55 * 1000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -127,28 +129,37 @@ function nomi(valore: FormDataEntryValue | null) {
   }
 }
 
-// Il primo modello che risponde; quota finita, modello ritirato, sovraccarico o lentezza: il prossimo
+// Il primo modello che risponde; quota finita, modello ritirato, sovraccarico o lentezza: il prossimo,
+// subito (Andrea sta aspettando: un altro modello risponde prima di una riprova sullo stesso)
+const MOTIVI: Record<number, string> = { 404: "non disponibile", 429: "quota finita", 500: "sovraccarico", 503: "sovraccarico", 504: "sovraccarico" };
+
 async function chiediAGemini(richiesta: string) {
   const errori: string[] = [];
+  const fine = Date.now() + TEMPO_TOTALE;
   for (const modello of MODELLI) {
+    const tempo = Math.min(TEMPO_GEMINI, fine - Date.now());
+    if (tempo < 3000) break;
     let gemini: Response;
     try {
       gemini = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modello}:generateContent`, {
         method: "POST",
         headers: { "x-goog-api-key": Deno.env.get("GEMINI_API_KEY") || "", "Content-Type": "application/json" },
         body: richiesta,
-        signal: AbortSignal.timeout(TEMPO_GEMINI)
+        signal: AbortSignal.timeout(tempo)
       });
     } catch (errore) {
-      errori.push(`${modello}: ${(errore as Error).name === "TimeoutError" ? "nessuna risposta in tempo" : "rete"}`);
+      errori.push(`${modello}: ${(errore as Error).name === "TimeoutError" ? "troppo lento" : "rete"}`);
       continue;
     }
     const risposta = await gemini.json().catch(() => ({}));
     if (gemini.ok) return risposta;
-    errori.push(`${modello}: ${gemini.status} ${gemini.status === 429 ? "quota finita" : (risposta?.error?.message || "").slice(0, 200)}`);
-    if (![404, 429, 500, 503, 504].includes(gemini.status)) break;
+    errori.push(`${modello}: ${MOTIVI[gemini.status] || `${gemini.status} ${(risposta?.error?.message || "").slice(0, 200)}`}`);
+    if (!MOTIVI[gemini.status]) break;
   }
-  throw new Error(`Gemini non disponibile (${errori.join("; ")})`);
+  const tuttiOccupati = errori.length && errori.every((errore) => /sovraccarico|troppo lento/.test(errore));
+  throw new Error(tuttiOccupati
+    ? `Gemini e' sovraccarico in questo momento, riprova tra qualche minuto (${errori.join("; ")}).`
+    : `Gemini non disponibile (${errori.join("; ")}).`);
 }
 
 Deno.serve(async (request) => {

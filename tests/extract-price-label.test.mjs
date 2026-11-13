@@ -111,3 +111,30 @@ test("frutta_verdura_carne_pesce_senza_prezzo_al_kg_incompleti", () => {
   ] });
   assert.deepEqual(righe.map((r) => r.price), ["", "", "", "5,45€/kg", "2,18€"]);
 });
+
+test("Gemini sovraccarico: prova i modelli di riserva, poi un messaggio breve", async () => {
+  const fetchVero = globalThis.fetch;
+  const provati = [];
+  try {
+    globalThis.fetch = async (url, init) => {
+      provati.push(String(url).split("/models/")[1].split(":")[0]);
+      if (provati.length < 3) return new Response(JSON.stringify({ error: { message: "This model is currently experiencing high demand." } }), { status: 503 });
+      return fetchVero(url, init);
+    };
+    lettura = { tipo: "etichetta", prodotto: "Latte", prezzo: 1.09, quantita: 0, unita: "nessuna", prezzo_unitario: 0, store: "", categoria: "" };
+    assert.equal((await chiama()).product, "Latte");
+    assert.deepEqual(provati, ["gemini-flash-latest", "gemini-3.6-flash", "gemini-3.5-flash-lite"]);
+
+    provati.length = 0;
+    globalThis.fetch = async (url) => {
+      provati.push(String(url).split("/models/")[1].split(":")[0]);
+      return new Response(JSON.stringify({ error: { message: "This model is currently experiencing high demand." } }), { status: 503 });
+    };
+    const { error } = await chiama();
+    assert.equal(provati.length, 4);
+    assert.match(error, /^Gemini e' sovraccarico in questo momento, riprova tra qualche minuto/);
+    assert.doesNotMatch(error, /high demand/);
+  } finally {
+    globalThis.fetch = fetchVero;
+  }
+});

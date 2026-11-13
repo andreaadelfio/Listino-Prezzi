@@ -28,8 +28,9 @@ articolo; il prezzo e' quello di un pezzo senza sconti; sconti, cauzione, totali
   Supabase (MyFinance, `fvhzmkvqizfnbgxexdgu`): i secret valgono per tutte le funzioni del progetto,
   quindi non va impostata di nuovo.
 - Modelli: prima `gemini-flash-latest` (abbina meglio le righe abbreviate degli scontrini), poi
-  `gemini-3.5-flash-lite` se il primo ha finito la quota, e' sovraccarico o non risponde. I nomi
-  stanno in `MODELLI` nella funzione.
+  `gemini-3.6-flash`, `gemini-3.5-flash-lite` e `gemini-3.1-flash-lite` se il precedente ha finito
+  la quota, e' sovraccarico o non risponde; in tutto al massimo 55 secondi (il sito ne aspetta 60).
+  I nomi stanno in `MODELLI` nella funzione.
 
 ### Pubblicazione
 
