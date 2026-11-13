@@ -689,6 +689,7 @@ function getPricePayload(prezzo) {
 }
 
 // --- Scontrino: finestrella con le righe aggiornate, nuove e non usate, da confermare ---
+const RECEIPT_NEW_STORE = "nuovo"; // valore della select per lo Store letto dallo scontrino e non ancora creato
 function openReceiptDialog(extraction) {
   const righe = Array.isArray(extraction?.righe) ? extraction.righe : [];
   if (!righe.length) {
@@ -696,22 +697,34 @@ function openReceiptDialog(extraction) {
   }
 
   const store = findStoreByName(extraction.storeName);
-  state.receipt = { righe, storeId: store ? String(store.id) : "", storeName: store?.name || "", askStore: !store, classified: null };
+  // Store letto ma non ancora nel listino: proposto come nuovo, si crea solo con "Salva"
+  const newStoreName = store ? "" : String(extraction.storeName || "").trim();
+  state.receipt = {
+    righe,
+    storeId: store ? String(store.id) : (newStoreName ? RECEIPT_NEW_STORE : ""),
+    storeName: store?.name || newStoreName,
+    newStoreName,
+    askStore: !store,
+    classified: null
+  };
   classifyReceipt();
 
-  const { classified } = state.receipt;
+  const { classified, storeName } = state.receipt;
   if (classified && !classified.updated.length && !classified.added.length) {
     const motivi = classified.skipped.map((riga) => `${riga.prodotto} (${riga.reason})`).join(", ");
     state.receipt = null;
-    setLabelPhotoStatus(`Scontrino ${store.name}: niente da aggiornare. ${motivi}`, "neutral");
+    setLabelPhotoStatus(`Scontrino ${storeName}: niente da aggiornare. ${motivi}`, "neutral");
     showFeedback("Nessun prezzo da aggiornare in questo scontrino.", "error");
     return;
   }
 
   setLabelPhotoStatus("", "neutral");
-  // Store non riconosciuto: si sceglie fra quelli esistenti (senza Store non si salva)
+  // Store non fra quelli esistenti: si conferma il nuovo o se ne sceglie uno (senza Store non si salva)
   elements.receiptStoreSelect.classList.toggle("hidden", !state.receipt.askStore);
-  elements.receiptStoreSelect.innerHTML = `<option value="">Di quale Store e' lo scontrino?</option>${state.Stores
+  const firstOption = newStoreName
+    ? `<option value="${RECEIPT_NEW_STORE}" selected>${escapeHtml(newStoreName)} (nuovo Store)</option>`
+    : `<option value="">Di quale Store e' lo scontrino?</option>`;
+  elements.receiptStoreSelect.innerHTML = `${firstOption}${state.Stores
     .map((Store) => `<option value="${Store.id}">${escapeHtml(Store.name)}</option>`).join("")}`;
   renderReceiptDialog();
   elements.receiptDialog?.showModal();
@@ -723,9 +736,11 @@ function classifyReceipt() {
 }
 
 function handleReceiptStoreChange() {
-  const store = state.Stores.find((Store) => String(Store.id) === elements.receiptStoreSelect.value);
-  state.receipt.storeId = store ? String(store.id) : "";
-  state.receipt.storeName = store?.name || "";
+  const { value } = elements.receiptStoreSelect;
+  const store = state.Stores.find((Store) => String(Store.id) === value);
+  const isNewStore = value === RECEIPT_NEW_STORE;
+  state.receipt.storeId = store ? String(store.id) : (isNewStore ? RECEIPT_NEW_STORE : "");
+  state.receipt.storeName = store?.name || (isNewStore ? state.receipt.newStoreName : "");
   classifyReceipt();
   renderReceiptDialog();
 }
@@ -801,6 +816,16 @@ async function handleReceiptSave() {
 
   elements.receiptSaveButton.disabled = true;
   elements.receiptSaveButton.textContent = "Salvataggio...";
+  let storeId = receipt.storeId;
+  if (storeId === RECEIPT_NEW_STORE) {
+    try {
+      storeId = (await createOrReuseStoreByName(receipt.newStoreName)).store.id;
+    } catch (error) {
+      updateReceiptSaveButton();
+      showFeedback(error.message, "error");
+      return;
+    }
+  }
   const results = await Promise.all([
     ...updated.map(({ row, price }) => state.supabaseClient
       .from("listino_prezzi_raw")
@@ -810,7 +835,7 @@ async function handleReceiptSave() {
     added.length ? state.supabaseClient.from("listino_prezzi_raw").insert(added.map(({ prodotto, price, categoryName }) => ({
       owner: state.currentOwner,
       prodotto,
-      retailer_id: Number(receipt.storeId),
+      retailer_id: Number(storeId),
       category_id: findCategoryByName(categoryName)?.id ?? null,
       ...getPricePayload(price)
     }))) : { error: null }

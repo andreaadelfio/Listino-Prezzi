@@ -17,7 +17,6 @@ prezzo va ricopiato a mano o fotografato etichetta per etichetta.
 ## Non obiettivi
 
 - Storico dei prezzi (il listino ha un prezzo per prodotto e Store, come oggi).
-- Creare Store nuovi dallo scontrino: lo Store deve esistere gia'.
 - Correggere nomi o prezzi dentro la finestrella: si tolgono le righe sbagliate e si sistemano
   poi con il form, come oggi.
 - Scontrini stranieri (non vietati, ma non curati).
@@ -62,8 +61,10 @@ e' la foto. Etichetta: come oggi, riempie il form. Scontrino: apre la finestrell
 
 ### Quando una riga e' sicura (nel sito, che ha le righe del listino)
 
-Lo Store e' quello letto dallo scontrino, abbinato a uno Store esistente. Se non si riconosce, la
-finestrella chiede di sceglierlo fra quelli esistenti (senza Store non si salva).
+Lo Store e' quello letto dallo scontrino, abbinato a uno Store esistente. Se e' letto ma non c'e'
+nel listino (es. Coop), la finestrella lo propone come nuovo Store, creato solo con "Salva"; se non
+si legge, chiede di sceglierlo fra quelli esistenti (senza Store non si salva). In tutti e due i casi
+si puo' scegliere un altro Store esistente.
 
 Per ogni riga letta:
 

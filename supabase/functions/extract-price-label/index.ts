@@ -53,7 +53,7 @@ const SCHEMA_RISPOSTA = {
     prodotto: { type: "string", description: "nome breve del prodotto in italiano, al massimo 4 parole (traduci se l'etichetta e' in un'altra lingua), come in una lista della spesa: cosa e', piu' la marca solo se conta; niente elenchi di gusti, peso o descrizioni (es. 'Yogurt greco Pam', 'Succo ananas mango'); vuoto se non si legge" },
     prezzo: { type: "number", description: "solo etichetta: il prezzo grande della confezione in euro, senza cauzione o vuoto a rendere (Statiegeld, Pfand); 0 se non si legge" },
     ...CAMPI_PREZZO,
-    store: { type: "string", description: "il negozio, se si capisce (per lo scontrino dall'intestazione); preferisci uno dei nomi dati. Vuoto se non si capisce" },
+    store: { type: "string", description: "il negozio, se si capisce (per lo scontrino dall'intestazione o dalla ragione sociale); preferisci uno dei nomi dati, altrimenti solo il nome dell'insegna (es. 'Coop' per 'COOP ALLEANZA 3.0 SOC. COOP.'), senza citta' o forma societaria. Vuoto se non si capisce" },
     categoria: { type: "string", description: "una delle categorie date, quella piu' adatta al prodotto; vuoto se nessuna va bene" }
   },
   required: ["tipo", "righe", "prodotto", "prezzo", "quantita", "unita", "prezzo_unitario", "store", "categoria"]
