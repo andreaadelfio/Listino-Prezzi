@@ -1272,8 +1272,10 @@ td.entry-actions-cell {
     background: transparent;
   }
 
+  /* In cima alla lista il trascinamento verso il basso passa alla pagina: Chrome ricarica (pull-to-refresh) */
   .table-wrap {
     overflow-x: hidden;
+    overscroll-behavior-y: auto;
     padding-right: 1.5rem;
   }
 
