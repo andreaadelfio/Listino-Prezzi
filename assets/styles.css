@@ -1217,8 +1217,15 @@ td.entry-actions-cell {
   - i selezionati sono una barra in basso che si apre con la freccia.
 */
 @media (max-width: 700px) {
+  /* Scorre la pagina, non un riquadro: Chrome mostra la rotella e ricarica trascinando dall'alto */
+  body {
+    overflow: visible;
+  }
+
   .page-shell {
     width: 100%;
+    height: auto;
+    min-height: 100dvh;
     padding: 0.5rem 0.6rem 0;
   }
 
@@ -1272,10 +1279,10 @@ td.entry-actions-cell {
     background: transparent;
   }
 
-  /* In cima alla lista il trascinamento verso il basso passa alla pagina: Chrome ricarica (pull-to-refresh) */
+  /* Niente scorrimento proprio (clip non crea un riquadro): intestazione e form restano fermi sulla pagina */
   .table-wrap {
-    overflow-x: hidden;
-    overscroll-behavior-y: auto;
+    overflow: visible;
+    overflow-x: clip;
     padding-right: 1.5rem;
   }
 
@@ -1592,6 +1599,8 @@ td.entry-actions-cell {
 
   /* Selezionati: barra in basso; la freccia apre la lista */
   .selection-panel {
+    position: sticky;
+    bottom: 0;
     z-index: 16;
     min-height: 0;
     padding: 0.4rem 0 0.5rem;
@@ -1601,6 +1610,17 @@ td.entry-actions-cell {
 
   .selection-panel:not(.reduced) {
     max-height: 60dvh;
+  }
+
+  /* ↑ fermo sopra la barra dei selezionati; con la lista dei selezionati aperta non serve */
+  .scroll-to-top-button {
+    position: fixed;
+    right: 2.2rem;
+    bottom: 4.6rem;
+  }
+
+  body:has(.selection-panel:not(.reduced)) .scroll-to-top-button {
+    display: none;
   }
 
   .receipt-dialog {

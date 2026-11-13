@@ -72,8 +72,7 @@ function updateScrollToTopButtonVisibility() {
     return;
   }
 
-  const scrollTop = elements.tableWrap?.scrollTop ?? window.scrollY;
-  const shouldShow = scrollTop > 280;
+  const shouldShow = getListScroller().scrollTop > 280;
   elements.scrollToTopButton.classList.toggle("hidden", !shouldShow);
 }
 
@@ -405,18 +404,7 @@ function revealProductInTable(product) {
     return;
   }
 
-  const scrollContainer = elements.tableWrap;
-  if (scrollContainer) {
-    const headerOffset = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--alphabet-scroll-offset")
-    ) || 0;
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const targetRect = targetRow.getBoundingClientRect();
-    const targetTop = targetRect.top - containerRect.top + scrollContainer.scrollTop - headerOffset;
-    scrollContainer.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
-  } else {
-    targetRow.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
+  scrollListToRow(targetRow);
 
   highlightProductRow(targetRow);
 }
@@ -1597,35 +1585,28 @@ function scrollToAlphabetLetter(letter) {
   }
 
   highlightAlphabetTarget(targetRow);
-  const scrollContainer = elements.tableWrap;
-  if (!scrollContainer) {
-    return;
-  }
+  scrollListToRow(targetRow);
+}
 
+// Chi scorre la lista: sul telefono la pagina (cosi' Chrome ricarica trascinando dall'alto), sul PC il riquadro
+function getListScroller() {
+  const wrap = elements.tableWrap;
+  return wrap && getComputedStyle(wrap).overflowY !== "visible" ? wrap : document.scrollingElement;
+}
+
+// Porta la riga appena sotto intestazione e form, che restano fermi in alto
+function scrollListToRow(row) {
+  const scroller = getListScroller();
   const headerOffset = Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue("--alphabet-scroll-offset")
   ) || 0;
-  const containerRect = scrollContainer.getBoundingClientRect();
-  const targetRect = targetRow.getBoundingClientRect();
-  const targetTop = targetRect.top - containerRect.top + scrollContainer.scrollTop - headerOffset;
-
-  scrollContainer.scrollTo({
-    top: Math.max(targetTop, 0),
-    behavior: "smooth"
-  });
+  const scrollerTop = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
+  const targetTop = row.getBoundingClientRect().top - scrollerTop + scroller.scrollTop - headerOffset;
+  scroller.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
 }
 
 function handleScrollToTop() {
-  const scrollContainer = elements.tableWrap;
-  if (!scrollContainer) {
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth"
-    });
-    return;
-  }
-
-  scrollContainer.scrollTo({
+  getListScroller().scrollTo({
     top: 0,
     behavior: "smooth"
   });
@@ -4060,6 +4041,7 @@ function bindEvents() {
   window.addEventListener("resize", updateStickyAlphabetMetrics);
   window.addEventListener("scroll", updateScrollToTopButtonVisibility, { passive: true });
   elements.tableWrap?.addEventListener("scroll", updateScrollToTopButtonVisibility, { passive: true });
+  window.addEventListener("scroll", updateScrollToTopButtonVisibility, { passive: true });
 }
 
 async function bootstrap() {
