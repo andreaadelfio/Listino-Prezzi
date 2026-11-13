@@ -98,3 +98,16 @@ test("a_peso_senza_prezzo_al_kg_e_incompleto", () => {
   ] });
   assert.deepEqual(righe.map((riga) => [riga.price, riga.incompleto]), [["", true], ["1,79€/kg", false], ["1,09€", false]]);
 });
+
+test("frutta_verdura_carne_pesce_senza_prezzo_al_kg_incompleti", () => {
+  const riga = (prodotto, categoria, altro = {}) => ({ testo: prodotto.toUpperCase(), prodotto, esistente: true, a_peso: false,
+    prezzo: 2.18, quantita: 0, unita: "nessuna", prezzo_unitario: 0, categoria, ...altro });
+  const { righe } = rispostaDaLettura({ tipo: "scontrino", store: "Coop", righe: [
+    riga("Zucchine", "Verdura"),
+    riga("Kiwi", "Frutta"),
+    riga("Filetti di sgombro", "Pesce e prodotti ittici"),
+    riga("Pomodorini", "Verdura", { quantita: 400, unita: "g" }),
+    riga("Penne rigate", "Pasta")
+  ] });
+  assert.deepEqual(righe.map((r) => r.price), ["", "", "", "5,45€/kg", "2,18€"]);
+});

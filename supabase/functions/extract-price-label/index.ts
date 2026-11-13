@@ -94,8 +94,10 @@ export function rispostaDaLettura(letto: Record<string, any>) {
   if (letto.tipo === "scontrino") {
     const righe = (Array.isArray(letto.righe) ? letto.righe : []).map((riga: Record<string, unknown>) => {
       const price = prezzoDi(riga);
-      // Venduto a peso ma senza prezzo al kg: il totale della riga non dice quanto costa
-      const incompleto = Boolean(riga.a_peso) && !/€\/kg$/.test(price);
+      // Venduto a peso ma senza prezzo al kg: il totale della riga non dice quanto costa. Gemini
+      // non sempre lo riconosce (ZUCCHINE BIO 2,18 con a_peso false), quindi vale anche la categoria
+      const aPeso = Boolean(riga.a_peso) || /frutta|verdura|carne|pesce/i.test(String(riga.categoria || ""));
+      const incompleto = aPeso && !/€\/kg$/.test(price);
       return {
         testo: String(riga.testo || "").trim(),
         prodotto: String(riga.prodotto || "").trim(),
