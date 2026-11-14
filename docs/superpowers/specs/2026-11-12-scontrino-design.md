@@ -17,8 +17,6 @@ prezzo va ricopiato a mano o fotografato etichetta per etichetta.
 ## Non obiettivi
 
 - Storico dei prezzi (il listino ha un prezzo per prodotto e Store, come oggi).
-- Correggere nomi o prezzi dentro la finestrella: si tolgono le righe sbagliate e si sistemano
-  poi con il form, come oggi.
 - Scontrini stranieri (non vietati, ma non curati).
 
 ## Da evitare (sarebbe un fallimento anche se "funziona")
@@ -95,9 +93,11 @@ Non usati (2)
                        [ Annulla ]  [ Salva 5 ]
 ```
 
-Tutte le righe aggiornate e nuove partono spuntate; Andrea toglie quelle sbagliate. "Salva"
-scrive solo le spuntate (update per le aggiornate, insert per le nuove, come il form) e poi
-ricarica il listino. Il vocabolario si aggiorna da solo (trigger del database).
+Le proposte si correggono nella finestrella (richiesta di Andrea del 14/11): aggiornata, il prezzo;
+nuova, nome, prezzo e categoria. Il cestino tondo toglie una riga, il + tondo in fondo ai Nuovi ne
+aggiunge una vuota; aprendo la finestrella il focus va su Annulla, non su un campo (la tastiera del
+telefono resta chiusa). "Salva" scrive le righe con nome e prezzo (update per le aggiornate, insert
+per le nuove, come il form) e poi ricarica il listino. Cambiare Store ricalcola le proposte da capo. Il vocabolario si aggiorna da solo (trigger del database).
 
 ### Casi limite (scelte mie)
 

@@ -57,3 +57,23 @@ export function classifyReceiptLines(righe, storeId, rows) {
 
   return { updated, added, skipped };
 }
+
+// Le proposte da correggere nella finestrella: una riga per ogni aggiornata e nuova, nello stesso ordine
+//   kind: "updated" (cambia solo il prezzo di row) o "added" (nome, prezzo e categoria si correggono)
+export function receiptItems({ updated, added }) {
+  return [
+    ...updated.map(({ testo, row, price }) => ({ kind: "updated", testo, row, prodotto: row.prodotto, price, categoryName: row.categoria || "" })),
+    ...added.map(({ testo, prodotto, price, categoryName }) => ({ kind: "added", testo, prodotto, price, categoryName }))
+  ];
+}
+
+// Cosa scrivere con "Salva": solo le righe con nome e prezzo (una riga lasciata vuota non conta)
+export function receiptOperations(items) {
+  const complete = items
+    .map((item) => ({ ...item, prodotto: String(item.prodotto || "").trim(), price: String(item.price || "").trim() }))
+    .filter((item) => item.prodotto && item.price);
+  return {
+    updates: complete.filter((item) => item.kind === "updated").map(({ row, price }) => ({ row, price })),
+    inserts: complete.filter((item) => item.kind === "added").map(({ prodotto, price, categoryName }) => ({ prodotto, price, categoryName }))
+  };
+}

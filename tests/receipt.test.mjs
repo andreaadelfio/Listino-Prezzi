@@ -1,7 +1,7 @@
 // Regola delle righe dello scontrino: quali aggiornano, quali sono nuove, quali non si usano
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyReceiptLines } from "../assets/app/receipt.js";
+import { classifyReceiptLines, receiptItems, receiptOperations } from "../assets/app/receipt.js";
 
 const STORE = "6";
 // state.rows e' ordinato dal piu' recente
@@ -108,4 +108,32 @@ test("nuovo_ma_con_nome_di_un_prodotto_esistente", () => {
     [riga("Mozzarella", "1,29€", { esistente: false, testo: "FILETTI DI SGOMBRO P" })], STORE, rows);
   assert.deepEqual([updated, added], [[], []]);
   assert.equal(skipped[0].reason, "abbinamento incerto");
+});
+
+test("proposte modificabili: aggiornate e nuove diventano righe da correggere", () => {
+  const classified = classifyReceiptLines([
+    { testo: "MOZZ.FIOR.LATTE 1,29", prodotto: "Mozzarella", esistente: true, price: "1,29€" },
+    { testo: "PASS.POM. 0,89", prodotto: "Passata di pomodoro", esistente: false, price: "0,89€", categoryName: "Verdura" }
+  ], STORE, rows);
+  assert.deepEqual(receiptItems(classified), [
+    { kind: "updated", testo: "MOZZ.FIOR.LATTE 1,29", row: rows[0], prodotto: "Mozzarella", price: "1,29€", categoryName: "Latte e derivati" },
+    { kind: "added", testo: "PASS.POM. 0,89", prodotto: "Passata di pomodoro", price: "0,89€", categoryName: "Verdura" }
+  ]);
+});
+
+test("salvataggio: solo le righe con nome e prezzo, con le correzioni di Andrea", () => {
+  const items = [
+    { kind: "updated", testo: "MOZZ", row: rows[0], prodotto: "Mozzarella", price: " 1,35€ ", categoryName: "Latte e derivati" },
+    { kind: "updated", testo: "PANE", row: rows[2], prodotto: "Pane", price: "", categoryName: "Panificati" },
+    { kind: "added", testo: "PASS.POM.", prodotto: " Passata ", price: "0,89€", categoryName: "Verdura" },
+    { kind: "added", testo: "", prodotto: "", price: "1€", categoryName: "" },
+    { kind: "added", testo: "", prodotto: "Zucchine", price: "2,49€/kg", categoryName: "" }
+  ];
+  assert.deepEqual(receiptOperations(items), {
+    updates: [{ row: rows[0], price: "1,35€" }],
+    inserts: [
+      { prodotto: "Passata", price: "0,89€", categoryName: "Verdura" },
+      { prodotto: "Zucchine", price: "2,49€/kg", categoryName: "" }
+    ]
+  });
 });

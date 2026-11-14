@@ -8,7 +8,7 @@ import {
   TABLE_COLUMN_COUNT
 } from "./app/constants.js";
 import { createProductGroupsSelector } from "./app/groups.js";
-import { classifyReceiptLines } from "./app/receipt.js";
+import { classifyReceiptLines, receiptItems, receiptOperations } from "./app/receipt.js";
 import { elements, state } from "./app/store.js";
 import {
   compareTextValues,
@@ -697,15 +697,7 @@ function openReceiptDialog(extraction) {
   };
   classifyReceipt();
 
-  const { classified, storeName } = state.receipt;
-  if (classified && !classified.updated.length && !classified.added.length) {
-    const motivi = classified.skipped.map((riga) => `${riga.prodotto} (${riga.reason})`).join(", ");
-    state.receipt = null;
-    setLabelPhotoStatus(`Scontrino ${storeName}: niente da aggiornare. ${motivi}`, "neutral");
-    showFeedback("Nessun prezzo da aggiornare in questo scontrino.", "error");
-    return;
-  }
-
+  // Anche senza proposte si apre: si vedono i motivi e si puo' aggiungere una riga a mano
   setLabelPhotoStatus("", "neutral");
   // Store non fra quelli esistenti: si conferma il nuovo o se ne sceglie uno (senza Store non si salva)
   elements.receiptStoreSelect.classList.toggle("hidden", !state.receipt.askStore);
@@ -721,6 +713,8 @@ function openReceiptDialog(extraction) {
 function classifyReceipt() {
   const receipt = state.receipt;
   receipt.classified = receipt.storeId ? classifyReceiptLines(receipt.righe, receipt.storeId, state.rows) : null;
+  // Le proposte da correggere; cambiando Store si ricalcolano da capo
+  receipt.items = receipt.classified ? receiptItems(receipt.classified) : [];
 }
 
 function handleReceiptStoreChange() {
@@ -733,8 +727,10 @@ function handleReceiptStoreChange() {
   renderReceiptDialog();
 }
 
+// Ogni proposta si corregge nella sua riga (aggiornata: il prezzo; nuova: nome, prezzo e categoria),
+// il cestino la toglie, il + in fondo ne aggiunge una. Salva scrive quelle con nome e prezzo.
 function renderReceiptDialog() {
-  const { storeName, classified } = state.receipt;
+  const { storeName, classified, items } = state.receipt;
   elements.receiptTitle.textContent = storeName ? `Scontrino ${storeName}` : "Scontrino";
 
   if (!classified) {
@@ -743,56 +739,85 @@ function renderReceiptDialog() {
     return;
   }
 
-  const checkbox = (key) => `<input type="checkbox" class="row-selection-checkbox" data-receipt-line="${key}" checked>`;
-  const section = (title, items, renderItem) => items.length ? `
+  const section = (title, lines, extra = "") => `
     <section class="receipt-section">
-      <p class="eyebrow">${title} (${items.length})</p>
-      ${items.map(renderItem).join("")}
-    </section>` : "";
-  const categoryLabel = (name) => {
-    const category = findCategoryByName(name);
-    return escapeHtml(category ? getCategoryDisplayName(category) : name);
-  };
+      <p class="eyebrow">${title} (${lines.length})</p>
+      ${lines.join("")}
+      ${extra}
+    </section>`;
+  const field = (index, name) => `data-receipt-index="${index}" data-receipt-field="${name}"`;
+  const priceInput = (item, index) =>
+    `<input class="receipt-price-input" type="text" value="${escapeHtml(item.price)}" ${field(index, "price")} placeholder="Es. 1€/kg" aria-label="Prezzo" autocomplete="off">`;
+  const categorySelect = (item, index) => `
+    <select ${field(index, "categoryName")} aria-label="Categoria">
+      <option value="">Senza categoria</option>
+      ${state.categories.map((category) => `<option value="${escapeHtml(category.name)}"${category.name === item.categoryName ? " selected" : ""}>${escapeHtml(getCategoryDisplayName(category))}</option>`).join("")}
+    </select>`;
+  const source = (testo) => testo ? `<span class="receipt-line-source">${escapeHtml(testo)}</span>` : "";
+  const removeButton = (item, index) => `
+    <button type="button" class="icon-button icon-button-danger" data-receipt-remove="${index}" aria-label="Togli ${escapeHtml(item.prodotto || "questa riga")}" title="Togli">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h12l-1 13H7L6 7zm3-3h6l1 2h4v2H4V6h4l1-2z"/></svg>
+    </button>`;
+  const withIndex = (kind) => items.map((item, index) => ({ item, index })).filter(({ item }) => item.kind === kind);
+
+  const updatedLines = withIndex("updated").map(({ item, index }) => `
+    <div class="receipt-line">
+      <span class="receipt-line-name">${escapeHtml(item.prodotto)}</span>
+      <span class="receipt-line-detail">${escapeHtml(formatPriceText(item.row.prezzo))} → ${priceInput(item, index)}</span>
+      ${source(item.testo)}
+      ${removeButton(item, index)}
+    </div>`);
+  const addedLines = withIndex("added").map(({ item, index }) => `
+    <div class="receipt-line">
+      <input class="receipt-line-name" type="text" value="${escapeHtml(item.prodotto)}" ${field(index, "prodotto")} placeholder="Prodotto" aria-label="Prodotto" autocomplete="off">
+      <span class="receipt-line-detail">${priceInput(item, index)}${categorySelect(item, index)}</span>
+      ${source(item.testo)}
+      ${removeButton(item, index)}
+    </div>`);
+  const skippedLines = classified.skipped.map(({ testo, prodotto, reason }) => `
+    <div class="receipt-line receipt-line-skipped">
+      <span class="receipt-line-name">${escapeHtml(prodotto || testo)}</span>
+      <span class="receipt-line-detail">${escapeHtml(reason)}</span>
+      ${source(testo)}
+    </div>`);
+  const addButton = `<button type="button" class="primary-button compact-button icon-button receipt-add-button" data-receipt-add aria-label="Aggiungi una riga" title="Aggiungi una riga">+</button>`;
 
   elements.receiptLines.innerHTML = [
-    section("Aggiornati", classified.updated, ({ testo, row, price }, index) => `
-      <label class="receipt-line">
-        <span class="receipt-line-name">${escapeHtml(row.prodotto)}</span>
-        <span class="receipt-line-detail">${escapeHtml(formatPriceText(row.prezzo))} → <strong>${escapeHtml(formatPriceText(price))}</strong></span>
-        <span class="receipt-line-source">${escapeHtml(testo)}</span>
-        ${checkbox(`updated-${index}`)}
-      </label>`),
-    section("Nuovi", classified.added, ({ testo, prodotto, price, categoryName }, index) => `
-      <label class="receipt-line">
-        <span class="receipt-line-name">${escapeHtml(prodotto)}</span>
-        <span class="receipt-line-detail"><strong>${escapeHtml(formatPriceText(price))}</strong> ${categoryLabel(categoryName)}</span>
-        <span class="receipt-line-source">${escapeHtml(testo)}</span>
-        ${checkbox(`added-${index}`)}
-      </label>`),
-    section("Non usati", classified.skipped, ({ testo, prodotto, reason }) => `
-      <div class="receipt-line receipt-line-skipped">
-        <span class="receipt-line-name">${escapeHtml(prodotto || testo)}</span>
-        <span class="receipt-line-detail">${escapeHtml(reason)}</span>
-        <span class="receipt-line-source">${escapeHtml(testo)}</span>
-      </div>`)
+    updatedLines.length ? section("Aggiornati", updatedLines) : "",
+    section("Nuovi", addedLines, addButton),
+    skippedLines.length ? section("Non usati", skippedLines) : ""
   ].join("");
   updateReceiptSaveButton();
 }
 
-function getCheckedReceiptLines() {
-  const checked = new Set([...elements.receiptLines.querySelectorAll("input[data-receipt-line]:checked")]
-    .map((input) => input.dataset.receiptLine));
-  const { classified } = state.receipt;
-  return {
-    updated: (classified?.updated || []).filter((_, index) => checked.has(`updated-${index}`)),
-    added: (classified?.added || []).filter((_, index) => checked.has(`added-${index}`))
-  };
+function handleReceiptLinesInput(event) {
+  const input = event.target.closest("[data-receipt-field]");
+  const item = input && state.receipt?.items[Number(input.dataset.receiptIndex)];
+  if (!item) return;
+  item[input.dataset.receiptField] = input.value;
+  updateReceiptSaveButton();
+}
+
+function handleReceiptLinesClick(event) {
+  const receipt = state.receipt;
+  if (!receipt) return;
+  const removeButton = event.target.closest("[data-receipt-remove]");
+  if (removeButton) {
+    receipt.items.splice(Number(removeButton.dataset.receiptRemove), 1);
+    renderReceiptDialog();
+    return;
+  }
+  if (event.target.closest("[data-receipt-add]")) {
+    receipt.items.push({ kind: "added", testo: "", prodotto: "", price: "", categoryName: "" });
+    renderReceiptDialog();
+    focusWithoutTouchKeyboard(elements.receiptLines.querySelector(`[data-receipt-index="${receipt.items.length - 1}"]`));
+  }
 }
 
 function updateReceiptSaveButton() {
   if (!state.receipt) return;
-  const { updated, added } = getCheckedReceiptLines();
-  const count = updated.length + added.length;
+  const { updates, inserts } = receiptOperations(state.receipt.items || []);
+  const count = updates.length + inserts.length;
   elements.receiptSaveButton.textContent = `Salva ${count}`;
   elements.receiptSaveButton.disabled = !state.receipt.storeId || count === 0;
 }
@@ -800,7 +825,7 @@ function updateReceiptSaveButton() {
 async function handleReceiptSave() {
   const receipt = state.receipt;
   if (!receipt?.storeId || !state.currentOwner) return;
-  const { updated, added } = getCheckedReceiptLines();
+  const { updates, inserts } = receiptOperations(receipt.items);
 
   elements.receiptSaveButton.disabled = true;
   elements.receiptSaveButton.textContent = "Salvataggio...";
@@ -815,12 +840,12 @@ async function handleReceiptSave() {
     }
   }
   const results = await Promise.all([
-    ...updated.map(({ row, price }) => state.supabaseClient
+    ...updates.map(({ row, price }) => state.supabaseClient
       .from("listino_prezzi_raw")
       .update(getPricePayload(price))
       .eq("id", row.id)
       .eq("owner", state.currentOwner)),
-    added.length ? state.supabaseClient.from("listino_prezzi_raw").insert(added.map(({ prodotto, price, categoryName }) => ({
+    inserts.length ? state.supabaseClient.from("listino_prezzi_raw").insert(inserts.map(({ prodotto, price, categoryName }) => ({
       owner: state.currentOwner,
       prodotto,
       retailer_id: Number(storeId),
@@ -839,7 +864,7 @@ async function handleReceiptSave() {
     return;
   }
   const conta = (n, uno, tanti) => `${n} ${n === 1 ? uno : tanti}`;
-  showFeedback(`Scontrino: ${conta(updated.length, "prezzo aggiornato", "prezzi aggiornati")}, ${conta(added.length, "prodotto aggiunto", "prodotti aggiunti")}.`);
+  showFeedback(`Scontrino: ${conta(updates.length, "prezzo aggiornato", "prezzi aggiornati")}, ${conta(inserts.length, "prodotto aggiunto", "prodotti aggiunti")}.`);
 }
 
 async function requestLabelExtraction(file) {
@@ -3987,7 +4012,8 @@ function bindEvents() {
   elements.priceForm.addEventListener("submit", handlePriceSubmit);
   elements.priceResetFiltersButton?.addEventListener("click", handlePriceResetFilters);
   elements.priceDeleteButton?.addEventListener("click", () => handleDeleteRow(state.editingRowId));
-  elements.receiptLines?.addEventListener("change", updateReceiptSaveButton);
+  elements.receiptLines?.addEventListener("input", handleReceiptLinesInput);
+  elements.receiptLines?.addEventListener("click", handleReceiptLinesClick);
   elements.receiptStoreSelect?.addEventListener("change", handleReceiptStoreChange);
   elements.receiptCancelButton?.addEventListener("click", () => elements.receiptDialog?.close());
   elements.receiptSaveButton?.addEventListener("click", handleReceiptSave);

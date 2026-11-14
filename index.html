@@ -13,7 +13,7 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="./assets/cart-icon.svg">
     <link rel="apple-touch-icon" href="./assets/cart-icon.svg">
-    <link rel="stylesheet" href="./assets/styles.css?v=20261113-4">
+    <link rel="stylesheet" href="./assets/styles.css?v=20261114-1">
   </head>
   <body>
     <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
@@ -309,13 +309,14 @@
       </div>
       <div id="receipt-lines" class="receipt-lines"></div>
       <div class="receipt-dialog-actions">
-        <button id="receipt-cancel-button" class="secondary-button" type="button">Annulla</button>
+        <!-- autofocus su Annulla: aprendo la finestrella il focus non va su un campo (aprirebbe la tastiera) -->
+        <button id="receipt-cancel-button" class="secondary-button" type="button" autofocus>Annulla</button>
         <button id="receipt-save-button" class="primary-button" type="button">Salva</button>
       </div>
     </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="./assets/config.js?v=20261113-4"></script>
-    <script type="module" src="./assets/app.js?v=20261113-4"></script>
+    <script src="./assets/config.js?v=20261114-1"></script>
+    <script type="module" src="./assets/app.js?v=20261114-1"></script>
   </body>
 </html>

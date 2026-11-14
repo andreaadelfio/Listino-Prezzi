@@ -77,7 +77,8 @@ Il pulsante fotocamera del form legge la foto di un'etichetta di prezzo con **Ge
 Lo stesso pulsante legge anche gli **scontrini** (lo capisce Gemini): si apre una finestrella con i
 prezzi aggiornati (vecchio → nuovo), i prodotti nuovi e le righe non usate con il motivo. Si
 aggiorna solo un prodotto gia' presente in quello Store con la stessa unita' di prezzo (€ con €,
-€/kg con €/kg); tutte le righe partono spuntate e "Salva" scrive solo quelle lasciate spuntate.
+€/kg con €/kg). Ogni proposta si corregge nella sua riga (aggiornata: il prezzo; nuova: nome,
+prezzo e categoria), il cestino la toglie, il + ne aggiunge una; "Salva" scrive quelle con nome e prezzo.
 La regola sta in `assets/app/receipt.js` (test: `make test`).
 
 `assets/config.js` ha l'indirizzo della funzione (`labelAiEndpoint`) e il limite della foto
