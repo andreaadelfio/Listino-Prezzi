@@ -66,7 +66,8 @@ stampa l'indirizzo da aprire sul telefono vero, sulla stessa rete Wi-Fi.
 
 ## Inserimento da foto etichetta
 
-Il pulsante fotocamera del form legge la foto di un'etichetta di prezzo con **Gemini**:
+Il pulsante fotocamera del form (o quello accanto, galleria, per una foto gia' fatta) legge la foto di
+un'etichetta di prezzo con **Gemini**:
 
 1. Scatti o scegli la foto (il sito la rimpicciolisce a ~1,5 MB).
 2. Il sito la manda alla Edge Function `extract-price-label`, insieme ai nomi di categorie e Store

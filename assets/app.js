@@ -222,6 +222,12 @@ function setLabelPhotoBusy(isBusy) {
   if (elements.labelPhotoInput) {
     elements.labelPhotoInput.disabled = state.labelPhotoBusy;
   }
+  if (elements.labelGalleryButton) {
+    elements.labelGalleryButton.disabled = state.labelPhotoBusy;
+  }
+  if (elements.labelGalleryInput) {
+    elements.labelGalleryInput.disabled = state.labelPhotoBusy;
+  }
 }
 
 function getLabelAiEndpoint() {
@@ -3894,7 +3900,8 @@ function handleProductInlineSuggestionClick() {
   applyProductInlineSuggestion();
 }
 
-function handleLabelPhotoButtonClick() {
+// Fotocamera o galleria: la foto scelta segue lo stesso percorso (handleLabelPhotoInputChange)
+function handleLabelPhotoButtonClick(event) {
   clearFeedback();
 
   if (state.labelPhotoBusy) {
@@ -3908,12 +3915,13 @@ function handleLabelPhotoButtonClick() {
     return;
   }
 
-  if (!elements.labelPhotoInput) {
+  const input = event?.currentTarget === elements.labelGalleryButton ? elements.labelGalleryInput : elements.labelPhotoInput;
+  if (!input) {
     showFeedback("Input foto non disponibile.", "error");
     return;
   }
 
-  elements.labelPhotoInput.click();
+  input.click();
 }
 
 async function handleLabelPhotoInputChange(event) {
@@ -4026,6 +4034,8 @@ function bindEvents() {
   elements.priceInlineSuggestion?.addEventListener("click", handlePriceInlineSuggestionClick);
   elements.labelPhotoButton?.addEventListener("click", handleLabelPhotoButtonClick);
   elements.labelPhotoInput?.addEventListener("change", handleLabelPhotoInputChange);
+  elements.labelGalleryButton?.addEventListener("click", handleLabelPhotoButtonClick);
+  elements.labelGalleryInput?.addEventListener("change", handleLabelPhotoInputChange);
   elements.feedback?.addEventListener("click", handleFeedbackClick);
 
   // Store e Categoria dropdown (nel form)

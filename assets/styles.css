@@ -1379,7 +1379,7 @@ td.entry-actions-cell {
     color: var(--accent-deep);
   }
 
-  /* Form su due righe: ricerca, × e foto; sotto prezzo, Store, categoria e + (a destra, sotto il pollice) */
+  /* Form su due righe: ricerca, ×, galleria e fotocamera; sotto prezzo, Store, categoria e + (a destra, sotto il pollice) */
   .entry-body {
     position: sticky;
     top: var(--entry-row-sticky-top);
@@ -1388,10 +1388,11 @@ td.entry-actions-cell {
 
   .entry-row {
     display: grid;
-    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 1.2fr) auto auto;
+    /* La categoria si allunga sotto ×, galleria e fotocamera: piu' spazio a prezzo e Store */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.5fr) auto auto auto;
     grid-template-areas:
-      "prod prod prod reset photo"
-      "price store cat cat add";
+      "prod prod prod reset gallery photo"
+      "price store cat cat cat add";
     align-items: center;
     gap: 0.35rem;
     padding: 0.3rem 0.4rem 0.4rem;
@@ -1401,8 +1402,8 @@ td.entry-actions-cell {
 
   .entry-row.entry-row-editing {
     grid-template-areas:
-      "prod prod prod reset photo"
-      "price store cat delete add";
+      "prod prod prod reset gallery photo"
+      "price store cat cat delete add";
   }
 
   .entry-row td {
@@ -1423,6 +1424,7 @@ td.entry-actions-cell {
   .entry-row td[data-label="Store"] { grid-area: store; }
   .entry-row td[data-label="Categoria"] { grid-area: cat; }
   #label-photo-button { grid-area: photo; }
+  #label-gallery-button { grid-area: gallery; }
   #price-reset-filters-button { grid-area: reset; }
   #price-submit-button { grid-area: add; }
   #price-delete-button { grid-area: delete; }
