@@ -66,7 +66,7 @@ stampa l'indirizzo da aprire sul telefono vero, sulla stessa rete Wi-Fi.
 
 ## Inserimento da foto etichetta
 
-Il pulsante fotocamera del form (o quello accanto, galleria, per una foto gia' fatta) legge la foto di
+Il pulsante fotocamera del form (scatto o foto gia' fatta, lo chiede Android) legge la foto di
 un'etichetta di prezzo con **Gemini**:
 
 1. Scatti o scegli la foto (il sito la rimpicciolisce a ~1,5 MB).
