@@ -83,6 +83,8 @@ export const elements = {
   priceSubmitButton: document.querySelector("#price-submit-button"),
   labelPhotoButton: document.querySelector("#label-photo-button"),
   labelPhotoInput: document.querySelector("#label-photo-input"),
+  labelGalleryInput: document.querySelector("#label-gallery-input"),
+  labelPhotoMenu: document.querySelector("#label-photo-menu"),
   labelPhotoStatus: document.querySelector("#label-photo-status"),
   priceResetFiltersButton: document.querySelector("#price-reset-filters-button"),
   priceDeleteButton: document.querySelector("#price-delete-button"),

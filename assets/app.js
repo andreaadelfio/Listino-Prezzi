@@ -222,6 +222,9 @@ function setLabelPhotoBusy(isBusy) {
   if (elements.labelPhotoInput) {
     elements.labelPhotoInput.disabled = state.labelPhotoBusy;
   }
+  if (elements.labelGalleryInput) {
+    elements.labelGalleryInput.disabled = state.labelPhotoBusy;
+  }
 }
 
 function getLabelAiEndpoint() {
@@ -1980,29 +1983,33 @@ function openRowStoreDropdown(product, anchorElement) {
 
   state.openRowStoreProduct = product;
   renderRowStoreOptions(product);
-  
-  const rect = anchorElement.getBoundingClientRect();
-  const panel = elements.rowStoreDropdownPanel;
-  
-  if (panel) {
-    panel.classList.remove("hidden");
-    panel.style.position = "fixed";
+  openPanelNear(elements.rowStoreDropdownPanel, anchorElement);
+}
 
-    let top = rect.bottom + 5;
-    let left = rect.left;
-
-    // Previeni l'uscita a destra (viewport width - larghezza pannello - padding)
-    if (left + panel.offsetWidth > window.innerWidth) {
-      left = Math.max(10, window.innerWidth - panel.offsetWidth - 10);
-    }
-    // Previeni l'uscita in basso (se non c'è spazio, apri verso l'alto)
-    if (top + panel.offsetHeight > window.innerHeight) {
-      top = rect.top - panel.offsetHeight - 5;
-    }
-
-    panel.style.top = `${top}px`;
-    panel.style.left = `${left}px`;
+// Mostra un pannello (custom-dropdown-panel) fisso sotto il pulsante che lo apre, dentro lo schermo
+function openPanelNear(panel, anchorElement) {
+  if (!panel) {
+    return;
   }
+
+  const rect = anchorElement.getBoundingClientRect();
+  panel.classList.remove("hidden");
+  panel.style.position = "fixed";
+
+  let top = rect.bottom + 5;
+  let left = rect.left;
+
+  // Previeni l'uscita a destra (viewport width - larghezza pannello - padding)
+  if (left + panel.offsetWidth > window.innerWidth) {
+    left = Math.max(10, window.innerWidth - panel.offsetWidth - 10);
+  }
+  // Previeni l'uscita in basso (se non c'è spazio, apri verso l'alto)
+  if (top + panel.offsetHeight > window.innerHeight) {
+    top = rect.top - panel.offsetHeight - 5;
+  }
+
+  panel.style.top = `${top}px`;
+  panel.style.left = `${left}px`;
 }
 
 function renderRowStoreOptions(product) {
@@ -3562,6 +3569,9 @@ function handleDocumentClick(event) {
   if (elements.rowStoreDropdownPanel && !elements.rowStoreDropdownPanel.contains(target) && !target.closest('[data-action="toggle-row-Store-dropdown"]')) {
     closeRowStoreDropdown();
   }
+  if (elements.labelPhotoMenu && !elements.labelPhotoMenu.contains(target) && !elements.labelPhotoButton?.contains(target)) {
+    closeLabelPhotoMenu();
+  }
 }
 
 function handleDocumentKeydown(event) {
@@ -3570,6 +3580,7 @@ function handleDocumentKeydown(event) {
     closeStoreDropdown();
     closeCategoryDropdown();
     closeSessionStoreDropdown();
+    closeLabelPhotoMenu();
   }
 }
 
@@ -3894,6 +3905,7 @@ function handleProductInlineSuggestionClick() {
   applyProductInlineSuggestion();
 }
 
+// Il pulsante fotocamera apre il menu Scatta / Galleria; la foto scelta va in handleLabelPhotoInputChange
 function handleLabelPhotoButtonClick() {
   clearFeedback();
 
@@ -3908,12 +3920,30 @@ function handleLabelPhotoButtonClick() {
     return;
   }
 
-  if (!elements.labelPhotoInput) {
-    showFeedback("Input foto non disponibile.", "error");
+  if (elements.labelPhotoMenu?.classList.contains("hidden")) {
+    openPanelNear(elements.labelPhotoMenu, elements.labelPhotoButton);
+  } else {
+    closeLabelPhotoMenu();
+  }
+}
+
+function closeLabelPhotoMenu() {
+  elements.labelPhotoMenu?.classList.add("hidden");
+}
+
+function handleLabelPhotoMenuClick(event) {
+  const source = event.target.closest("[data-photo-source]")?.dataset.photoSource;
+  if (!source) {
     return;
   }
 
-  elements.labelPhotoInput.click();
+  closeLabelPhotoMenu();
+  const input = source === "gallery" ? elements.labelGalleryInput : elements.labelPhotoInput;
+  if (!input) {
+    showFeedback("Input foto non disponibile.", "error");
+    return;
+  }
+  input.click();
 }
 
 async function handleLabelPhotoInputChange(event) {
@@ -4026,6 +4056,8 @@ function bindEvents() {
   elements.priceInlineSuggestion?.addEventListener("click", handlePriceInlineSuggestionClick);
   elements.labelPhotoButton?.addEventListener("click", handleLabelPhotoButtonClick);
   elements.labelPhotoInput?.addEventListener("change", handleLabelPhotoInputChange);
+  elements.labelGalleryInput?.addEventListener("change", handleLabelPhotoInputChange);
+  elements.labelPhotoMenu?.addEventListener("click", handleLabelPhotoMenuClick);
   elements.feedback?.addEventListener("click", handleFeedbackClick);
 
   // Store e Categoria dropdown (nel form)

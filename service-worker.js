@@ -1,4 +1,4 @@
-const CACHE_NAME = "listino-prezzi-shell-v15";
+const CACHE_NAME = "listino-prezzi-shell-v16";
 const APP_SHELL = [
   "./",
   "./index.html",

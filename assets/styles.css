@@ -307,6 +307,13 @@ select {
   font-size: 1rem;
 }
 
+#label-photo-menu .custom-dropdown-option svg {
+  flex: 0 0 auto;
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: currentColor;
+}
+
 .custom-dropdown-option-active {
   border-color: rgba(166, 75, 42, 0.25);
   background: rgba(166, 75, 42, 0.12);
