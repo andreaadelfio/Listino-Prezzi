@@ -1822,12 +1822,12 @@ function updateStoreDropdownLabel() {
         return;
       }
     }
-    elements.StoreDropdownLabel.textContent = "Select";
+    elements.StoreDropdownLabel.textContent = "Store";
     return;
   }
 
   const Store = state.Stores.find((item) => String(item.id) === String(state.formStoreId));
-  elements.StoreDropdownLabel.textContent = Store?.name || "Select";
+  elements.StoreDropdownLabel.textContent = Store?.name || "Store";
 }
 
 function renderStoreList() {
@@ -1902,7 +1902,7 @@ function updateCategoryDropdownLabel() {
         return;
       }
     }
-    elements.categoryDropdownLabel.textContent = "Select";
+    elements.categoryDropdownLabel.textContent = "Categoria";
     return;
   }
 
@@ -2917,8 +2917,9 @@ async function refreshData() {
       return;
     }
     updateShoppingSessionUI();
-    showTableMessage(`Errore nel caricamento dati: ${error.message}`);
-    showFeedback(`Errore nel caricamento dati: ${error.message}`, "error");
+    console.error("Caricamento listino fallito", error);
+    showTableMessage("Non riesco a caricare il listino: controlla la connessione e riprova con ↻.");
+    showFeedback("Non riesco a caricare il listino: controlla la connessione e riprova con ↻.", "error");
   } finally {
     hideLoadingOverlay();
   }
@@ -3399,7 +3400,7 @@ async function handlePriceSubmit(event) {
       await refreshData();
       showSuccessFeedbackWithProductLink(
         StoreInfo.created
-          ? `Store "${StoreInfo.StoreName}" creato e riga listino aggiornata per `
+          ? ` aggiornato, nello Store nuovo "${StoreInfo.StoreName}".`
           : " aggiornato con successo.",
         prodotto
       );
@@ -3420,7 +3421,7 @@ async function handlePriceSubmit(event) {
     await loadRows();
     showSuccessFeedbackWithProductLink(
       StoreInfo.created
-        ? `Store "${StoreInfo.StoreName}" creato e riga listino salvata per `
+        ? ` inserito, nello Store nuovo "${StoreInfo.StoreName}".`
         : " inserito con successo.",
       prodotto
     );
