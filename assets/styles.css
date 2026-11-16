@@ -1239,6 +1239,23 @@ td.entry-actions-cell {
   cursor: default;
 }
 
+/* Senza rete (listino salvato, vedi showSavedListino): si legge, si ordina e si copia, ma niente
+   modifiche, che non arriverebbero al database */
+.sola-lettura #entry-row {
+  opacity: 0.45;
+}
+
+.sola-lettura #entry-row,
+.sola-lettura #select-all-checkbox,
+.sola-lettura #rows-body input,
+.sola-lettura #rows-body button,
+.sola-lettura #rows-body a,
+.sola-lettura #selected-rows-list,
+.sola-lettura #selected-rows-clear-button,
+.sola-lettura #retailer-session-button {
+  pointer-events: none;
+}
+
 /* Il pulsante Cancella del form serve solo sul telefono (vedi sotto) */
 #price-delete-button {
   display: none;

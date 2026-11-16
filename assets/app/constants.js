@@ -1,4 +1,4 @@
-export const APP_VERSION = "20261114-4";
+export const APP_VERSION = "20261116-1";
 export const TABLE_COLUMN_COUNT = 6;
 export const FEEDBACK_DISMISS_MS = 7000;
 export const QUANTITY_UPDATE_DEBOUNCE_MS = 650;
@@ -12,3 +12,8 @@ export const SESSION_URL_PARAM_KEYS = Object.freeze({
   sortDirection: "sd"
 });
 export const ALPHABET_INDEX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+// Letture da Supabase: oltre questo tempo si rinuncia e, se c'e', si mostra il listino salvato
+export const LETTURA_TIMEOUT_MS = 8000;
+// localStorage: ultimo listino caricato (vedi showSavedListino in app.js)
+export const SAVED_LISTINO_KEY = "listino-prezzi-salvato";

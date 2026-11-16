@@ -62,6 +62,9 @@ stampa l'indirizzo da aprire sul telefono vero, sulla stessa rete Wi-Fi.
 
 - L'app si aspetta `window.APP_CONFIG` definito in `assets/config.js`.
 - Il service worker cachea solo asset locali dell'app shell.
+- Senza rete (o se Supabase non risponde entro 8 secondi) il sito mostra l'ultimo listino caricato,
+  salvato in localStorage, solo da leggere; con ↻ si riprova. supabase-js e' fissato a una versione
+  esatta, che resta nella cache del browser.
 - Se cambi file frontend e vedi asset vecchi, conviene aggiornare la versione cache del service worker.
 
 ## Inserimento da foto etichetta

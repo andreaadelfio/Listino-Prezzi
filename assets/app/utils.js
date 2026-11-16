@@ -132,3 +132,60 @@ export function focusWithoutTouchKeyboard(element) {
     element.focus();
   }
 }
+
+// Svuota il form di inserimento (la x): campi, scelte di Store e categoria, suggerimenti
+export function clearEntryFormState(state) {
+  state.formStoreId = "";
+  state.formCategoryValue = "";
+  state.formSearchTerm = "";
+  state.StoreSearchTerm = ""; // "Nuovo Store: ..." (letto dalla foto o scritto): senza, il + successivo lo creerebbe
+  state.categorySearchTerm = "";
+  state.productInlineSuggestion = null;
+  state.categorySelectionSource = "none";
+  state.suggestedCategoryValue = "";
+}
+
+// Parole per il suggerimento mentre si scrive il prodotto: prima quelle che compaiono nei prodotti
+// del listino, poi le altre del vocabolario. Solo parole di almeno 5 lettere e senza cifre.
+export function rankVocabularyWords(productNames, vocabularyWords) {
+  const historicalWords = productNames
+    .flatMap((name) => String(name || "").split(/[^\p{L}]+/u))
+    .map((word) => String(word.toLowerCase() || "").trim())
+    .filter((word) => word && word.length >= 5 && !/\d/.test(word));
+  const words = [...new Set([...historicalWords, ...vocabularyWords]
+    .map((word) => String(word || "").trim())
+    .filter((word) => word && word.length >= 5 && !/\d/.test(word))
+  )].sort((a, b) => a.localeCompare(b, "it"));
+  // Confronto senza maiuscole e accenti con un Set (prima localeCompare parola per parola: 1,5 s sul telefono)
+  const key = (word) => word.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  const historicalKeys = new Set(historicalWords.map(key));
+  const inProducts = (word) => historicalKeys.has(key(word));
+  return [...words.filter(inProducts), ...words.filter((word) => !inProducts(word))];
+}
+
+// L'ultimo listino caricato, da mostrare senza rete (solo per lo stesso owner)
+export function makeListinoSnapshot({ owner, Stores, categories, rows }, savedAt = Date.now()) {
+  return JSON.stringify({ owner, savedAt, Stores, categories, rows });
+}
+
+export function readListinoSnapshot(text, owner) {
+  try {
+    const saved = JSON.parse(text);
+    return saved && Array.isArray(saved.rows) && normalizeOwnerKey(saved.owner) === normalizeOwnerKey(owner) ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+// fetch per supabase-js: le letture si arrendono dopo ms (rete assente o lentissima). Le scritture
+// no: una insert lenta puo' arrivare lo stesso, e ripeterla farebbe doppioni.
+export function fetchWithTimeout(ms, baseFetch = (...args) => fetch(...args)) {
+  return (url, options = {}) => {
+    const method = String(options.method || "GET").toUpperCase();
+    if (method !== "GET" && method !== "HEAD") {
+      return baseFetch(url, options);
+    }
+    const timeout = AbortSignal.timeout(ms);
+    return baseFetch(url, { ...options, signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout });
+  };
+}

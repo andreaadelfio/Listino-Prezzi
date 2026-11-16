@@ -2,8 +2,10 @@ import {
   ALPHABET_INDEX_LETTERS,
   FEEDBACK_DISMISS_MS,
   FILTER_INPUT_DEBOUNCE_MS,
+  LETTURA_TIMEOUT_MS,
   OWNER_CACHE_KEY,
   QUANTITY_UPDATE_DEBOUNCE_MS,
+  SAVED_LISTINO_KEY,
   SESSION_URL_PARAM_KEYS,
   TABLE_COLUMN_COUNT
 } from "./app/constants.js";
@@ -11,8 +13,10 @@ import { createProductGroupsSelector } from "./app/groups.js";
 import { classifyReceiptLines, receiptItems, receiptOperations } from "./app/receipt.js";
 import { elements, state } from "./app/store.js";
 import {
+  clearEntryFormState,
   compareTextValues,
   escapeHtml,
+  fetchWithTimeout,
   focusWithoutTouchKeyboard,
   formatPriceText,
   formatPriceForTable,
@@ -25,7 +29,10 @@ import {
   normalizeQuantity,
   parsePriceText,
   normalizeSortDirection,
-  normalizeSortKey
+  normalizeSortKey,
+  makeListinoSnapshot,
+  rankVocabularyWords,
+  readListinoSnapshot
 } from "./app/utils.js";
 
 const selectProductGroups = createProductGroupsSelector();
@@ -543,7 +550,13 @@ function createSupabaseClient() {
   }
 
   // le tabelle del listino stanno nello schema `listino` del progetto MyFinance
-  return window.supabase.createClient(supabaseUrl, supabaseKey, { db: { schema: "listino" } });
+  // Letture con timeout corto: senza rete o con rete lentissima si mostra presto il listino salvato.
+  // retry: false perche' supabase-js riproverebbe da solo 3 volte (fino a ~40 s con la rete appesa);
+  // si riprova a mano con ↻
+  return window.supabase.createClient(supabaseUrl, supabaseKey, {
+    db: { schema: "listino", retry: false },
+    global: { fetch: fetchWithTimeout(LETTURA_TIMEOUT_MS) }
+  });
 }
 
 function setSelectValue(selectElement, value) {
@@ -2770,22 +2783,7 @@ async function loadProductVocabulary() {
     .map((row) => String(row.word || "").trim())
     .filter(Boolean);
 
-  const historicalWords = state.rows
-  .flatMap((row) => String(row?.prodotto || "").split(/[^\p{L}]+/u))
-  .map((word) => String(word.toLowerCase() || "").trim())
-  .filter((word) => word && word.length >= 5 && !/\d/.test(word));
-  const words = [...new Set([
-    ...historicalWords,
-    ...state.productVocabularyWords
-  ]
-    .map((word) => String(word || "").trim())
-    .filter((word) => word && word.length >= 5 && !/\d/.test(word))
-  )].sort((a, b) => a.localeCompare(b, "it"));
-  
-  state.rankedWords = [
-    ...words.filter((word) => historicalWords.some((historicalWord) => historicalWord.localeCompare(word, "it", { sensitivity: "base" }) === 0)),
-    ...words.filter((word) => !historicalWords.some((historicalWord) => historicalWord.localeCompare(word, "it", { sensitivity: "base" }) === 0))
-  ];
+  state.rankedWords = rankVocabularyWords(state.rows.map((row) => row?.prodotto), state.productVocabularyWords);
   renderProductInlineSuggestion();
 }
 
@@ -2830,16 +2828,7 @@ async function loadRows() {
     categoria_display: categoryDisplayMap.get(String(row.category_id)) || null
   }));
 
-  state.checkedProducts = {};
-  state.crossedOutProducts = {};
-  state.rows.forEach((row) => {
-    if (row.selected) {
-      state.checkedProducts[row.prodotto] = true;
-    }
-    if (row.selected && row.is_scratched) {
-      state.crossedOutProducts[row.prodotto] = true;
-    }
-  });
+  syncSelectionFromRows();
 
 
   if (state.editingRowId && !findRowById(state.editingRowId)) {
@@ -2850,6 +2839,57 @@ async function loadRows() {
   renderCategoryList();
   renderProductInlineSuggestion();
 
+}
+
+function syncSelectionFromRows() {
+  state.checkedProducts = {};
+  state.crossedOutProducts = {};
+  state.rows.forEach((row) => {
+    if (row.selected) {
+      state.checkedProducts[row.prodotto] = true;
+    }
+    if (row.selected && row.is_scratched) {
+      state.crossedOutProducts[row.prodotto] = true;
+    }
+  });
+}
+
+function saveListinoSnapshot() {
+  try {
+    window.localStorage.setItem(SAVED_LISTINO_KEY, makeListinoSnapshot({
+      owner: state.currentOwner, Stores: state.Stores, categories: state.categories, rows: state.rows
+    }));
+  } catch {
+    // Storage pieno o bloccato: senza rete non ci sara' la copia, il resto funziona
+  }
+}
+
+// Caricamento non riuscito (rete assente, lentissima o Supabase giu'): l'ultimo listino salvato di
+// questo owner, solo da leggere. Restituisce false se non c'e' una copia da mostrare.
+function showSavedListino(owner) {
+  let saved = null;
+  try {
+    saved = readListinoSnapshot(window.localStorage.getItem(SAVED_LISTINO_KEY), owner);
+  } catch {
+    saved = null;
+  }
+  if (!saved) {
+    return false;
+  }
+
+  state.currentOwner = ensureOwnerOption(saved.owner);
+  state.Stores = saved.Stores || [];
+  state.categories = saved.categories || [];
+  state.rows = saved.rows;
+  syncSelectionFromRows();
+  document.body.classList.add("sola-lettura");
+  renderOwnerSelect();
+  renderStoreList();
+  renderCategoryList();
+  applyFilters({ syncUrl: false });
+  const quando = new Date(saved.savedAt).toLocaleString("it-IT", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
+  setOwnerStatus(`Non riesco a caricare il listino: vedi quello salvato il ${quando}, solo da leggere. Riprova con ↻.`, "error");
+  return true;
 }
 
 async function refreshData() {
@@ -2867,7 +2907,15 @@ async function refreshData() {
     await loadCategories();
     await loadProductVocabulary();
     await loadRows();
+    saveListinoSnapshot();
+    if (document.body.classList.contains("sola-lettura")) {
+      document.body.classList.remove("sola-lettura");
+      setOwnerStatus("");
+    }
   } catch (error) {
+    if (showSavedListino(state.currentOwner)) {
+      return;
+    }
     updateShoppingSessionUI();
     showTableMessage(`Errore nel caricamento dati: ${error.message}`);
     showFeedback(`Errore nel caricamento dati: ${error.message}`, "error");
@@ -3824,12 +3872,7 @@ function handlePriceResetFilters() {
 
   // Reset solo del form di inserimento
   elements.priceForm.reset();
-  state.formStoreId = "";
-  state.formCategoryValue = "";
-  state.formSearchTerm = "";
-  state.productInlineSuggestion = null;
-  state.categorySelectionSource = "none";
-  state.suggestedCategoryValue = "";
+  clearEntryFormState(state);
   clearLabelPhotoStatus();
   setLabelPhotoBusy(false);
 
@@ -4131,8 +4174,12 @@ async function bootstrap() {
       "neutral"
     );
   } catch (error) {
-    showFatal(`Avvio app fallito: ${error.message}`);
-    setOwnerStatus(`Avvio app fallito: ${error.message}`, "error");
+    console.error("Avvio app fallito", error);
+    if (showSavedListino(readSessionStateFromUrl().owner || getCachedOwner())) {
+      return;
+    }
+    showFatal("Non riesco a caricare il listino: controlla la connessione e ricarica la pagina.");
+    setOwnerStatus("Non riesco a caricare il listino: controlla la connessione e ricarica la pagina.", "error");
   } finally {
     hideLoadingOverlay();
   }
