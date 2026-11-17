@@ -1399,8 +1399,8 @@ td.entry-actions-cell {
 
   .entry-row {
     display: grid;
-    /* La categoria si allunga sotto × e fotocamera: piu' spazio a prezzo e Store */
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 0.5fr) auto auto;
+    /* La categoria si allunga sotto × e fotocamera; le misure lasciano interi "Es. 1€/kg", "Store" e "Categoria" */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr) minmax(0, 0.75fr) auto auto;
     grid-template-areas:
       "prod prod prod reset photo"
       "price store cat cat add";
@@ -1411,10 +1411,15 @@ td.entry-actions-cell {
     box-shadow: inset 0 -1px 0 rgba(31, 42, 36, 0.1);
   }
 
+  /* In modifica il cestino sta in alto, prima di ×: la categoria resta larga come quando si aggiunge */
   .entry-row.entry-row-editing {
     grid-template-areas:
-      "prod prod prod reset photo"
-      "price store cat delete add";
+      "prod prod delete reset photo"
+      "price store cat cat add";
+  }
+
+  .entry-row-editing #price-delete-button {
+    justify-self: end;
   }
 
   .entry-row td {

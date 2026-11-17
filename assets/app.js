@@ -1737,8 +1737,10 @@ function setPriceFormMode(mode, row = null) {
       elements.productInput.value = row.prodotto || "";
     }
     if (elements.priceInput) {
-      elements.priceInput.value = row.prezzo || "";
+      // Come nella lista ("1,50€/l"), non com'e' salvato ("1.5€/l")
+      elements.priceInput.value = formatPriceText(row.prezzo || "");
     }
+    setPriceSubmitIcon("edit");
     state.StoreSearchTerm = "";
     state.categorySearchTerm = "";
     setFormStoreSelection(row.retailer_id);
@@ -1759,6 +1761,7 @@ function setPriceFormMode(mode, row = null) {
   clearLabelPhotoStatus();
   setLabelPhotoBusy(false);
   elements.entryRow?.classList.remove("entry-row-editing");
+  setPriceSubmitIcon("create");
   setFormStoreSelection("");
   setFormCategorySelection("", { source: "none" });
   state.formSearchTerm = "";
@@ -1768,6 +1771,16 @@ function setPriceFormMode(mode, row = null) {
   state.priceInlineSuggestion = null;
   renderProductInlineSuggestion();
   renderPriceInlineSuggestion();
+}
+
+// + aggiunge una riga; in modifica lo stesso pulsante salva la riga, quindi ✓
+function setPriceSubmitIcon(mode) {
+  const button = elements.priceSubmitButton;
+  if (!button) return;
+  const label = mode === "edit" ? "Salva la modifica" : "Aggiungi al listino";
+  button.textContent = mode === "edit" ? "✓" : "+";
+  button.setAttribute("aria-label", label);
+  button.title = label;
 }
 
 function closeStoreDropdown() {
