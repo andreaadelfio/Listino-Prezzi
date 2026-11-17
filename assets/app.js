@@ -106,34 +106,10 @@ function stopFeedbackTimer() {
     window.clearTimeout(state.feedbackHideTimeoutId);
     state.feedbackHideTimeoutId = null;
   }
-  if (state.feedbackAnimationFrameId !== null) {
-    window.cancelAnimationFrame(state.feedbackAnimationFrameId);
-    state.feedbackAnimationFrameId = null;
-  }
-}
-
-function updateFeedbackTimer(startTime, durationMs) {
-  if (!elements.feedback) {
-    return;
-  }
-  const timerElement = elements.feedback.querySelector(".feedback-timer");
-  if (!timerElement) {
-    return;
-  }
-
-  const elapsed = performance.now() - startTime;
-  const progress = Math.min(elapsed / durationMs, 1);
-  timerElement.style.setProperty("--feedback-progress", `${progress * 100}%`);
-
-  if (progress < 1 && !elements.feedback.classList.contains("hidden")) {
-    state.feedbackAnimationFrameId = window.requestAnimationFrame(() => updateFeedbackTimer(startTime, durationMs));
-  }
 }
 
 function startFeedbackTimer(durationMs = FEEDBACK_DISMISS_MS) {
   stopFeedbackTimer();
-  const startTime = performance.now();
-  updateFeedbackTimer(startTime, durationMs);
   state.feedbackHideTimeoutId = window.setTimeout(() => {
     clearFeedback();
   }, durationMs);
@@ -144,11 +120,9 @@ function showFeedback(message, type = "success") {
     return;
   }
   stopFeedbackTimer();
-  const timerMarkup = `<span class="feedback-timer" aria-hidden="true"></span>`;
   elements.feedback.innerHTML = `
     <span class="feedback-content">
       <span class="feedback-message">${escapeHtml(message)}</span>
-      ${timerMarkup}
     </span>
   `;
   elements.feedback.className = `feedback feedback-inline feedback-${type}`;
@@ -168,7 +142,6 @@ function showSuccessFeedbackWithProductLink(message, product) {
   }
 
   stopFeedbackTimer();
-  const timerMarkup = `<span class="feedback-timer" aria-hidden="true"></span>`;
   elements.feedback.innerHTML = `
     <span class="feedback-content">
       <span class="feedback-message">
@@ -181,7 +154,6 @@ function showSuccessFeedbackWithProductLink(message, product) {
         </button>
         ${escapeHtml(message)}
       </span>
-      ${timerMarkup}
     </span>
   `;
   elements.feedback.className = "feedback feedback-inline feedback-success";
@@ -4005,7 +3977,6 @@ async function handleLabelPhotoInputChange(event) {
   if (!String(file.type || "").startsWith("image/")) {
     input.value = "";
     setLabelPhotoStatus("Seleziona un'immagine valida.", "error");
-    showFeedback("Seleziona un'immagine valida.", "error");
     return;
   }
 
@@ -4014,7 +3985,6 @@ async function handleLabelPhotoInputChange(event) {
     const maxMb = Math.round((maxBytes / (1024 * 1024)) * 10) / 10;
     const message = `Immagine troppo pesante. Limite ${maxMb} MB.`;
     setLabelPhotoStatus(message, "error");
-    showFeedback(message, "error");
     return;
   }
 
@@ -4037,7 +4007,6 @@ async function handleLabelPhotoInputChange(event) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Analisi etichetta fallita.";
     setLabelPhotoStatus(message, "error");
-    showFeedback(message, "error");
   } finally {
     hideLoadingOverlay();
     setLabelPhotoBusy(false);

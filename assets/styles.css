@@ -615,24 +615,6 @@ select {
   border-radius: 4px;
 }
 
-.feedback-timer {
-  --feedback-progress: 0%;
-  position: relative;
-  flex: 0 0 auto;
-  width: 1.45rem;
-  height: 1.45rem;
-  border-radius: 50%;
-  background: conic-gradient(var(--mint) var(--feedback-progress), rgba(63, 109, 86, 0.14) 0);
-}
-
-.feedback-timer::after {
-  content: "";
-  position: absolute;
-  inset: 0.23rem;
-  border-radius: 50%;
-  background: rgba(255, 250, 244, 0.96);
-}
-
 .feedback-success {
   border-left: 4px solid var(--mint);
 }
@@ -1048,6 +1030,11 @@ td.entry-actions-cell {
 .entry-meta {
   max-width: 13rem;
   line-height: 1.35;
+}
+
+/* La cella dei pulsanti non va a capo: il messaggio della foto si' (prima veniva tagliato) */
+#label-photo-status {
+  white-space: normal;
 }
 
 .entry-meta-success {

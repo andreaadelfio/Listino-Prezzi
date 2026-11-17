@@ -30,7 +30,6 @@ export const state = {
   crossedOutProducts: {},
   formSearchTerm: "",
   feedbackHideTimeoutId: null,
-  feedbackAnimationFrameId: null,
   alphabetHighlightTimeoutId: null,
   loadingRequestCount: 0,
   labelPhotoBusy: false,
