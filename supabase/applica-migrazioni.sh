@@ -10,6 +10,8 @@ cartella="$(dirname "$0")/migrations"
 db() { psql "$SUPABASE_DB_URL" -X -q -v ON_ERROR_STOP=1 "$@"; }
 
 db -c "set client_min_messages = warning; create table if not exists public.migrazioni (repo text, file text, applicato_il timestamptz not null default now(), primary key (repo, file))"
+# public è esposto dall'API: RLS senza policy e niente permessi, ci entra solo postgres.
+db -c "alter table public.migrazioni enable row level security; revoke all on public.migrazioni from anon, authenticated"
 applicati="$(db -At -c "select file from public.migrazioni where repo = '$repo'")"
 
 for percorso in "$cartella"/*.sql; do
