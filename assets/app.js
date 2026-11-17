@@ -1245,6 +1245,8 @@ function setOwnerStatus(message, type = "neutral") {
 }
 
 function renderOwnerSelect() {
+  // Senza owner si vede solo la scelta dell'owner: form, lista e indice non servirebbero a niente
+  document.body.classList.toggle("senza-owner", !state.currentOwner);
   if (!elements.ownerDropdownLabel || !elements.ownerDropdownSearch || !elements.ownerDropdownOptions) {
     return;
   }
@@ -1646,6 +1648,15 @@ async function handleSelectAllChange(event) {
   }
   
   let nextSelected = Boolean(target.checked);
+
+  // Un tocco su "tutti" svuoterebbe la lista della spesa: si chiede prima, come per cancellare una riga
+  const selectedCount = visibleProducts.filter((product) => state.checkedProducts[product]).length;
+  const willClear = state.selectAllWasIndeterminate || !target.checked;
+  if (willClear && selectedCount > 1 && !window.confirm(`Togliere ${selectedCount} prodotti dalla lista della spesa?`)) {
+    state.selectAllWasIndeterminate = false;
+    updateSelectAllCheckboxState();
+    return;
+  }
 
   if (state.selectAllWasIndeterminate) {
     visibleProducts.forEach((product) => {

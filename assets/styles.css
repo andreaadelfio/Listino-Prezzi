@@ -1243,6 +1243,14 @@ td.entry-actions-cell {
   pointer-events: none;
 }
 
+/* Prima di scegliere l'owner (classe tolta da renderOwnerSelect) */
+.senza-owner .table-container,
+.senza-owner .alphabet-index-wrap,
+.senza-owner #session-store-dropdown,
+.senza-owner #selected-rows-box {
+  display: none;
+}
+
 /* Quantita' solo per i prodotti selezionati; sul PC resta lo spazio per tenere i nomi allineati */
 .quantity-control:has(.quantity-input:disabled) {
   visibility: hidden;
