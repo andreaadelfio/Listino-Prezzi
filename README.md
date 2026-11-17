@@ -33,6 +33,31 @@ Migrazione dal vecchio progetto (una volta sola):
 Le policy sono rimaste aperte come prima (chiunque abbia l'URL del sito legge e scrive): da chiudere
 con il login.
 
+## Deploy di Supabase
+
+A ogni push su `main` che tocca `supabase/` parte la GitHub Action `.github/workflows/supabase.yml`
+(si lancia anche a mano: Actions → Supabase → Run workflow). Fa due passi, in quest'ordine:
+
+1. **SQL**: `supabase/applica-migrazioni.sh` applica i file nuovi di `supabase/migrations/`, in
+   ordine di nome, ognuno in una transazione. Ogni file applicato è segnato in `public.migrazioni`
+   (colonna `repo` = `portafogli-web`); al giro dopo viene saltato. Se un file fallisce, si ferma tutto.
+2. **Edge Function**: solo se l'SQL è andato, carica ogni cartella di `supabase/functions/`
+   (Verify JWT spento, come prima).
+
+**Aggiungere una modifica al database:** un file nuovo `supabase/migrations/AAAA-MM-GG-cosa.sql`,
+senza `begin`/`commit`, rieseguibile se possibile (`if not exists`). Un file già applicato non si
+cambia: se serve, se ne scrive un altro. `schema.sql` resta la descrizione completa (non si applica
+da solo): va aggiornato anche lui.
+
+**Approvazione:** se un file nuovo contiene `drop`, `delete`, `update` o `truncate` (anche in un
+`alter ... drop`), l'Action si ferma e scrive nel log le righe trovate. Passa solo se il file ha la
+riga `-- approvato da Andrea`.
+
+Secrets del repository su GitHub (una volta sola): `SUPABASE_ACCESS_TOKEN` e `SUPABASE_DB_URL`
+(connection string del Session pooler). Niente `supabase db push`: MyFinance e Listino scrivono
+sullo stesso progetto e la sua cronologia unica li metterebbe in conflitto. Lo script è lo stesso
+in MyBody, MyFinance e portafogli-web: se cambia, va copiato in tutti e tre.
+
 ## Avvio locale
 
 Server statico rapido:

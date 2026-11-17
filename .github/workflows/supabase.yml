@@ -1,0 +1,39 @@
+# Deploy di Supabase a ogni push su main che tocca supabase/ (o a mano, da Actions → Run workflow).
+# Prima l'SQL, poi le Edge Function: se l'SQL fallisce le funzioni non si caricano.
+name: Supabase
+
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/**"]
+  workflow_dispatch:
+
+concurrency: supabase
+
+env:
+  PROJECT_REF: fvhzmkvqizfnbgxexdgu # progetto di MyFinance (schema listino)
+  REPO: portafogli-web # nome delle righe in public.migrazioni
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Migrazioni SQL
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: bash supabase/applica-migrazioni.sh "$REPO"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.1
+
+      # Tutte le funzioni hanno Verify JWT spento: controllano da sé la chiave secret.
+      - name: Edge Function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          for cartella in supabase/functions/*/; do
+            supabase functions deploy "$(basename "$cartella")" --project-ref "$PROJECT_REF" --no-verify-jwt --use-api
+          done

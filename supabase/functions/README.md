@@ -39,6 +39,8 @@ npx supabase functions deploy extract-price-label --project-ref fvhzmkvqizfnbgxe
 ```
 
 Il sito la chiama con la sola chiave publishable nell'header `apikey`, per questo `--no-verify-jwt`.
+La pubblica da sola la GitHub Action a ogni push su `main` (vedi "Deploy di Supabase" nel README
+principale); il comando sopra serve solo a mano.
 Ogni volta che cambia la risposta va pubblicata insieme al sito.
 
 Serve aver fatto una volta `npx supabase login` (Node.js 20+). Test con Deno e Gemini finti: `make test`.
