@@ -2603,7 +2603,7 @@ function renderRows() {
             >
               ${escapeHtml(row.Store_name)}
             </a>
-            <button
+            ${group.rows.length > 1 ? `<button
               type="button"
               class="icon-button compact-button"
               data-action="toggle-row-Store-dropdown"
@@ -2612,7 +2612,7 @@ function renderRows() {
               title="Scegli un altro Store"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5z"/></svg>
-            </button>
+            </button>` : ""}
           </div>
         </td>
         <td data-label="Categoria">
@@ -2634,18 +2634,6 @@ function renderRows() {
         </td>
         <td data-label="Azioni">
           <div class="row-actions">
-            <button
-              type="button"
-              class="icon-button"
-              data-action="edit-row"
-              data-row-id="${row.id}"
-              aria-label="Modifica ${escapeHtml(group.product)} presso ${escapeHtml(row.Store_name)}"
-              title="Modifica"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4 17.25V20h2.75L17.8 8.94l-2.75-2.75L4 17.25zm14.71-9.04a1.003 1.003 0 0 0 0-1.42l-1.5-1.5a1.003 1.003 0 0 0-1.42 0l-1.17 1.17 2.75 2.75 1.34-1z"/>
-              </svg>
-            </button>
             <button
               type="button"
               class="icon-button icon-button-danger"
@@ -2972,8 +2960,15 @@ function handleSelectedRowsToggleSize() {
 
   box.classList.toggle("reduced");
 
-  elements.selectedRowsToggleSize.textContent =
-    box.classList.contains("reduced") ? "↑" : "↓";
+  setSelectedRowsToggleIcon(box.classList.contains("reduced"));
+}
+
+// Apre o chiude la lista dei selezionati: triangolo come gli altri menu (la freccia ↑ e' "torna su")
+function setSelectedRowsToggleIcon(isReduced) {
+  const label = isReduced ? "Apri la lista dei selezionati" : "Chiudi la lista dei selezionati";
+  elements.selectedRowsToggleSize.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${isReduced ? "M7 14l5-5 5 5z" : "M7 10l5 5 5-5z"}"/></svg>`;
+  elements.selectedRowsToggleSize.setAttribute("aria-label", label);
+  elements.selectedRowsToggleSize.title = label;
 }
 
 function updateShoppingSessionUI() {

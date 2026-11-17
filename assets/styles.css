@@ -1243,6 +1243,11 @@ td.entry-actions-cell {
   pointer-events: none;
 }
 
+/* Quantita' solo per i prodotti selezionati; sul PC resta lo spazio per tenere i nomi allineati */
+.quantity-control:has(.quantity-input:disabled) {
+  visibility: hidden;
+}
+
 /* Il pulsante Cancella del form serve solo sul telefono (vedi sotto) */
 #price-delete-button {
   display: none;
