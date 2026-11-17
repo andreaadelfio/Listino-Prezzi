@@ -719,7 +719,8 @@ select {
   border-radius: var(--radius-sm);
   background: rgba(166, 75, 42, 0.06);
   color: var(--ink);
-  font-family: "SFMono-Regular", "Cascadia Code", "Fira Code", "Courier New", monospace;
+  font-family: inherit; /* e' un <pre>: senza, il browser userebbe il suo monospace */
+  font-variant-numeric: tabular-nums;
   font-size: 0.92rem;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -878,7 +879,8 @@ td[data-label="Prezzo"] {
   display: inline-grid;
   grid-template-columns: 1fr 4.5ch; /* Spazio fisso per l'unità per allineare le virgole */
   gap: 0.4ch;
-  font-family: "SFMono-Regular", "Cascadia Code", "Fira Code", "Courier New", monospace;
+  /* Font del sito con cifre a larghezza fissa (allinea le virgole): i monospace di prima su Android
+     non ci sono e veniva fuori un monospace di sistema sottile e spaziato */
   font-variant-numeric: tabular-nums;
   font-size: 1rem;
   white-space: nowrap;
