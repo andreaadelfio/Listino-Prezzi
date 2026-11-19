@@ -394,6 +394,27 @@ function revealProductInTable(product, behavior = "smooth") {
   highlightProductRow(targetRow);
 }
 
+// Tastiera aperta (pagina molto piu' bassa del solito mentre si scrive in un campo): body.tastiera-aperta
+// nasconde il pannello dei selezionati, che si mangerebbe meta' dello spazio; torna quando si chiude.
+// Non basta il focus: su Android si chiude la tastiera con "indietro" e il campo resta selezionato.
+function bindKeyboardWatch() {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+  let fullHeight = viewport.height;
+  const update = () => {
+    fullHeight = Math.max(fullHeight, viewport.height);
+    const typing = document.activeElement?.matches?.("input:not([type=checkbox]):not([type=file]), textarea");
+    document.body.classList.toggle("tastiera-aperta", Boolean(typing) && viewport.height < fullHeight * 0.75);
+  };
+  viewport.addEventListener("resize", update);
+  document.addEventListener("focusin", update);
+  document.addEventListener("focusout", () => window.setTimeout(update, 0));
+  window.addEventListener("orientationchange", () => {
+    fullHeight = 0;
+    window.setTimeout(update, 300);
+  });
+}
+
 // Pressione lunga su un selezionato: porta al prodotto nel listino e lo evidenzia (il tocco breve
 // lo barra, come prima). Ci si muove di piu' di 10 px: e' uno scorrimento, non una pressione.
 function bindSelectedRowsLongPress() {
@@ -4085,6 +4106,7 @@ function bindEvents() {
   elements.shoppingSessionButton?.addEventListener("click", handleShoppingSessionToggle);
   elements.selectedRowsList?.addEventListener("click", handleSelectedRowClick);
   bindSelectedRowsLongPress();
+  bindKeyboardWatch();
   elements.selectAllCheckbox?.addEventListener("pointerdown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("keydown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("change", handleSelectAllChange);

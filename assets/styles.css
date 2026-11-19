@@ -1696,6 +1696,12 @@ td.entry-actions-cell {
     display: none;
   }
 
+  /* Tastiera aperta (bindKeyboardWatch): spazio al form e alla lista, il pannello torna dopo */
+  .tastiera-aperta #selected-rows-box,
+  .tastiera-aperta .scroll-to-top-button {
+    display: none;
+  }
+
   .receipt-dialog {
     width: 100vw;
     max-width: 100vw;

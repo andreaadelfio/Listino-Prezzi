@@ -2,7 +2,9 @@
 <html lang="it">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- resizes-content: su Chrome Android la tastiera accorcia la pagina, cosi' il form fisso in cima
+         resta intero (prima si accorciava solo la parte visibile e il form finiva tagliato) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
     <title>Listino Prezzi</title>
     <meta name="application-name" content="Listino Prezzi">
     <meta name="theme-color" content="#a64b2a">
@@ -13,7 +15,7 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="./assets/cart-icon.svg">
     <link rel="apple-touch-icon" href="./assets/cart-icon.svg">
-    <link rel="stylesheet" href="./assets/styles.css?v=20261119-1">
+    <link rel="stylesheet" href="./assets/styles.css?v=20261119-2">
   </head>
   <body class="senza-owner">
     <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
@@ -339,7 +341,7 @@
 
     <!-- Versione esatta: un aggiornamento di supabase-js non cambia il sito da solo; resta nella cache del browser (immutable) e funziona anche senza rete -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-    <script src="./assets/config.js?v=20261119-1"></script>
-    <script type="module" src="./assets/app.js?v=20261119-1"></script>
+    <script src="./assets/config.js?v=20261119-2"></script>
+    <script type="module" src="./assets/app.js?v=20261119-2"></script>
   </body>
 </html>
