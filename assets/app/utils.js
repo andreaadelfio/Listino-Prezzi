@@ -189,3 +189,31 @@ export function fetchWithTimeout(ms, baseFetch = (...args) => fetch(...args)) {
     return baseFetch(url, { ...options, signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout });
   };
 }
+
+// Categoria scritta con un'emoji ("🍎 Frutta"): l'emoji va nell'icona, il resto e' il nome
+// Si divide per caratteri visibili (Intl.Segmenter): un'emoji puo' essere fatta di piu' codici
+// ("❄️" = ❄ + U+FE0F, "👍🏽", "🧑‍🍳") e va presa intera, se no il resto finisce nel nome.
+export function extractEmojiAndName(input) {
+  const characters = [...new Intl.Segmenter("it", { granularity: "grapheme" }).segment(String(input || ""))].map((part) => part.segment);
+  const iconIndex = characters.findIndex((character) => /\p{Extended_Pictographic}/u.test(character));
+  if (iconIndex === -1) {
+    return { name: characters.join("").trim(), icon: null };
+  }
+  const name = characters.filter((_, index) => index !== iconIndex).join("").replace(/\s+/g, " ").trim();
+  return { name, icon: characters[iconIndex] };
+}
+
+// Selezionati raggruppati per categoria (titolo con l'icona), in ordine alfabetico del nome
+export function groupByCategory(items) {
+  const grouped = new Map();
+  items.forEach((item) => {
+    const cat = item.row.categoria_display || "Altro";
+    if (!grouped.has(cat)) grouped.set(cat, []);
+    grouped.get(cat).push(item);
+  });
+  // Per nome, non per titolo: il titolo comincia con l'emoji e l'ordine sarebbe quello dei codici
+  const name = (cat) => grouped.get(cat)[0].row.categoria || "";
+  return [...grouped.keys()]
+    .sort((a, b) => (a === "Altro") - (b === "Altro") || name(a).localeCompare(name(b), "it"))
+    .map((cat) => [cat, grouped.get(cat)]);
+}

@@ -15,6 +15,8 @@ import { elements, state } from "./app/store.js";
 import {
   clearEntryFormState,
   compareTextValues,
+  extractEmojiAndName,
+  groupByCategory,
   escapeHtml,
   fetchWithTimeout,
   focusWithoutTouchKeyboard,
@@ -2086,18 +2088,10 @@ function getSelectedProductSummaries() {
 
 function buildSelectedRowsClipboardText(selectedItems = getSelectedProductSummaries()) {
   if (selectedItems.length > 5) {
-    const grouped = new Map();
-    selectedItems.forEach(item => {
-      const cat = item.row.categoria_display || "Altro";
-      if (!grouped.has(cat)) grouped.set(cat, []);
-      grouped.get(cat).push(item);
-    });
-
-    const sortedCats = [...grouped.keys()].sort((a, b) => a.localeCompare(b, "it"));
     let text = "";
-    sortedCats.forEach(cat => {
+    groupByCategory(selectedItems).forEach(([cat, items]) => {
       text += `${cat}\n`;
-      grouped.get(cat).forEach(({ product, row }) => {
+      items.forEach(({ product, row }) => {
         text += `  ${getRowQuantityValue(row)}x ${product} | ${row.Store_name || "-"} | ${row.prezzo || "-"}\n`;
       });
     });
@@ -2290,18 +2284,9 @@ function renderSelectedRowsBox() {
 
   let markup = "";
   if (selectedItems.length > 5) {
-    const grouped = new Map();
-    selectedItems.forEach(item => {
-      const cat = item.row.categoria_display || "Altro";
-      if (!grouped.has(cat)) grouped.set(cat, []);
-      grouped.get(cat).push(item);
-    });
-
-    const sortedCats = [...grouped.keys()].sort((a, b) => a.localeCompare(b, "it"));
-
-    sortedCats.forEach(cat => {
+    groupByCategory(selectedItems).forEach(([cat, items]) => {
       markup += `<div class="selection-category-header">${escapeHtml(cat)}</div>`;
-      grouped.get(cat).forEach(({ product, row }) => {
+      items.forEach(({ product, row }) => {
         const isCrossed = state.crossedOutProducts[product] ? "crossed-out" : "";
         const itemText = `  ${escapeHtml(getRowQuantityValue(row))}x ${escapeHtml(product)} | ${escapeHtml(row.Store_name || "-")} | ${escapeHtml(row.prezzo || "-")}`;
         markup += `<div class="selected-row-item ${isCrossed}" data-crossed-product="${escapeHtml(product)}">${itemText}</div>`;
@@ -2744,7 +2729,8 @@ async function loadCategories() {
     .order("name", { ascending: true });
 
   if (error) throw error;
-  state.categories = data || [];
+  // In ordine alfabetico italiano per tutti i menu (l'ordine del database dipende dalla sua collation)
+  state.categories = (data || []).sort((a, b) => compareTextValues(a.name, b.name));
   renderCategoryList();
 }
 
@@ -3210,19 +3196,6 @@ async function resolveStoreForSubmit() {
     StoreName: Store?.name || null,
     created: false
   };
-}
-
-function extractEmojiAndName(input) {
-  const emojiRegex = /\p{Extended_Pictographic}/u;
-  const match = input.match(emojiRegex);
-
-  if (match) {
-    const icon = match[0];
-    const name = input.replace(icon, "").trim();
-    return { name, icon };
-  }
-
-  return { name: input.trim(), icon: null };
 }
 
 async function resolveCategoryForSubmit() {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clearEntryFormState, fetchWithTimeout, formatPriceText, makeListinoSnapshot, rankVocabularyWords, readListinoSnapshot } from "../assets/app/utils.js";
+import { clearEntryFormState, extractEmojiAndName, fetchWithTimeout, formatPriceText, groupByCategory, makeListinoSnapshot, rankVocabularyWords, readListinoSnapshot } from "../assets/app/utils.js";
 
 test("formatPriceText_come_nella_tabella", () => {
   assert.equal(formatPriceText("3.4€"), "3,40€");
@@ -74,4 +74,28 @@ test("timeout corto solo sulle letture", async (t) => {
   const promessa = fetchWithTimeout(10000, lento)("https://x/rest/v1/righe", { signal: annulla.signal });
   annulla.abort(new Error("annullata"));
   await assert.rejects(promessa, /annullata/);
+});
+
+// "❄️" sono due caratteri (❄ + U+FE0F): prima l'icona prendeva solo il primo e il nome restava
+// "\uFE0F Surgelati" (categoria 55 di Andrea, 19/11)
+test("categoria nuova: emoji intera nell'icona, nome pulito", () => {
+  assert.deepEqual(extractEmojiAndName("❄️ Surgelati"), { name: "Surgelati", icon: "❄️" });
+  assert.deepEqual(extractEmojiAndName("Surgelati ❄️"), { name: "Surgelati", icon: "❄️" });
+  assert.deepEqual(extractEmojiAndName("🧑‍🍳 Cucina"), { name: "Cucina", icon: "🧑‍🍳" });
+  assert.deepEqual(extractEmojiAndName("👍🏽 Ok"), { name: "Ok", icon: "👍🏽" });
+  assert.deepEqual(extractEmojiAndName("🍎 Frutta"), { name: "Frutta", icon: "🍎" });
+  assert.deepEqual(extractEmojiAndName("  Pasta "), { name: "Pasta", icon: null });
+});
+
+// Gruppi della lista dei selezionati: in ordine alfabetico del nome (non dell'emoji davanti),
+// "Altro" (senza categoria) in fondo
+test("selezionati: gruppi per categoria in ordine alfabetico, Altro in fondo", () => {
+  const riga = (prodotto, categoria, icona) => ({ product: prodotto, row: { categoria, categoria_display: categoria ? `${icona} ${categoria}` : null } });
+  const gruppi = groupByCategory([
+    riga("Lamponi", "Surgelati", "❄️"), riga("Crostini", null), riga("Mele", "Frutta", "🍎"),
+    riga("Pane", "Alimentari", "🛒"), riga("Pere", "Frutta", "🍎")
+  ]);
+  assert.deepEqual(gruppi.map(([titolo, voci]) => [titolo, voci.map((v) => v.product)]), [
+    ["🛒 Alimentari", ["Pane"]], ["🍎 Frutta", ["Mele", "Pere"]], ["❄️ Surgelati", ["Lamponi"]], ["Altro", ["Crostini"]]
+  ]);
 });
