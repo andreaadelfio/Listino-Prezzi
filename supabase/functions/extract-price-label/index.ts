@@ -1,6 +1,6 @@
 // Legge con Gemini la foto di un'etichetta di prezzo o di uno scontrino (lo capisce Gemini).
-//   etichetta: {tipo: "etichetta", product, price, storeName, categoryName}: il sito riempie il form
-//   scontrino: {tipo: "scontrino", storeName, righe: [{testo, prodotto, esistente, price, categoryName}]}:
+//   etichetta: {tipo: "etichetta", product, price, marca, formato, storeName, categoryName}: il sito riempie il form
+//   scontrino: {tipo: "scontrino", storeName, righe: [{testo, prodotto, esistente, price, marca, formato, categoryName}]}:
 //              il sito mostra una finestrella da confermare. Il salvataggio resta sempre manuale.
 //
 // Richiesta: POST multipart con "image" (la foto) e, facoltativi, "categorie", "store" e "prodotti"
@@ -31,6 +31,8 @@ const CAMPI_PREZZO = {
   prezzo_unitario: { type: "number", description: "il prezzo al kg o al litro se e' stampato (es. 3.96 per '1 L = 3.96', 1.79 per '0,532 kg x 1,79 €/kg'); 0 se non c'e'" }
 };
 
+const MARCA = { type: "string", description: "la marca solo se e' scritta (es. 'Granarolo', 'Barilla'), con maiuscole normali anche se stampata tutta maiuscola; vuoto se non c'e', senza indovinare" };
+
 const SCHEMA_RISPOSTA = {
   type: "object",
   properties: {
@@ -44,21 +46,23 @@ const SCHEMA_RISPOSTA = {
           testo: { type: "string", description: "la riga com'e' scritta sullo scontrino, tutta: nome, quantita' e prezzo (es. 'POMODORINI FF G400 2 X 1,39 2,78'); per la roba pesata anche la riga del peso (es. 'ZUCCHINE BIO 0,532 kg x 2,49 EUR/kg 1,32')" },
           prodotto: { type: "string", description: "il nome esatto di uno dei prodotti dati solo se e' lo stesso articolo (stesso tipo e, se il nome la dice, stessa marca); altrimenti un nome breve in italiano, al massimo 4 parole, che dica cos'e' (es. 'Filetti di sgombro'), mai il nome di una categoria" },
           esistente: { type: "boolean", description: "true solo se prodotto e' uno dei nomi dati; nel dubbio false" },
+          marca: MARCA,
           a_peso: { type: "boolean", description: "true se si confronta al kg: frutta, verdura, carne, pesce, formaggi e altro venduto sfuso o in confezioni di peso variabile" },
           prezzo: { type: "number", description: "prezzo di un pezzo in euro, senza sconti (per '2 x 1,29' e' 1.29); per la roba pesata il totale della riga" },
           ...CAMPI_PREZZO,
           categoria: { type: "string", description: "una delle categorie date, quella piu' adatta; vuoto se nessuna va bene" }
         },
-        required: ["testo", "prodotto", "esistente", "a_peso", "prezzo", "quantita", "unita", "prezzo_unitario", "categoria"]
+        required: ["testo", "prodotto", "esistente", "marca", "a_peso", "prezzo", "quantita", "unita", "prezzo_unitario", "categoria"]
       }
     },
     prodotto: { type: "string", description: "nome breve del prodotto in italiano, al massimo 4 parole (traduci se l'etichetta e' in un'altra lingua), come in una lista della spesa: cosa e', piu' la marca solo se conta; niente elenchi di gusti, peso o descrizioni (es. 'Yogurt greco Pam', 'Succo ananas mango'); vuoto se non si legge" },
+    marca: MARCA,
     prezzo: { type: "number", description: "solo etichetta: il prezzo grande della confezione in euro, senza cauzione o vuoto a rendere (Statiegeld, Pfand); 0 se non si legge" },
     ...CAMPI_PREZZO,
     store: { type: "string", description: "il negozio, se si capisce (per lo scontrino dall'intestazione o dalla ragione sociale); preferisci uno dei nomi dati, altrimenti solo il nome dell'insegna (es. 'Coop' per 'COOP ALLEANZA 3.0 SOC. COOP.'), senza citta' o forma societaria. Vuoto se non si capisce" },
     categoria: { type: "string", description: "una delle categorie date, quella piu' adatta al prodotto; vuoto se nessuna va bene" }
   },
-  required: ["tipo", "righe", "prodotto", "prezzo", "quantita", "unita", "prezzo_unitario", "store", "categoria"]
+  required: ["tipo", "righe", "prodotto", "marca", "prezzo", "quantita", "unita", "prezzo_unitario", "store", "categoria"]
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -87,6 +91,13 @@ export function prezzoDaListino(prezzo: number, quantita: number, unita: string,
   return prezzo > 0 ? `${euro(prezzo)}€` : "";
 }
 
+// Il formato della confezione per la colonna formato ("500 g", "0,75 l", "20 pz"): la quantita' letta,
+// vuoto se non c'e' o se e' un pezzo solo
+export function formatoDaLettura(quantita: number, unita: string) {
+  if (!(quantita > 0) || !(unita in IN_KG_O_L || unita === "pz") || (unita === "pz" && quantita < 2)) return "";
+  return `${String(quantita).replace(".", ",")} ${unita}`;
+}
+
 const prezzoDi = (letto: Record<string, unknown>) => prezzoDaListino(Number(letto.prezzo) || 0,
   Number(letto.quantita) || 0, String(letto.unita || ""), Number(letto.prezzo_unitario) || 0);
 
@@ -106,6 +117,10 @@ export function rispostaDaLettura(letto: Record<string, any>) {
         esistente: Boolean(riga.esistente),
         price: incompleto ? "" : price,
         incompleto,
+        marca: String(riga.marca || "").trim(),
+        // Per la roba pesata (a_peso, o "0,532 kg x 2,49 EUR/kg") la quantita' e' quanto si e' comprato,
+        // non il formato di una confezione; la vaschetta di pomodorini da 400 g invece lo e'
+        formato: riga.a_peso || Number(riga.prezzo_unitario) > 0 ? "" : formatoDaLettura(Number(riga.quantita) || 0, String(riga.unita || "")),
         categoryName: String(riga.categoria || "").trim()
       };
     });
@@ -115,6 +130,8 @@ export function rispostaDaLettura(letto: Record<string, any>) {
     tipo: "etichetta",
     product: String(letto.prodotto || "").trim(),
     price: prezzoDi(letto),
+    marca: String(letto.marca || "").trim(),
+    formato: formatoDaLettura(Number(letto.quantita) || 0, String(letto.unita || "")),
     storeName,
     categoryName: String(letto.categoria || "").trim()
   };
@@ -188,7 +205,7 @@ Deno.serve(async (request) => {
     const prodotti = nomi(formData.get("prodotti"));
     const istruzioni = [
       "E' la foto di un'etichetta di prezzo (scaffale o prodotto) o di uno scontrino della spesa. Leggi i dati per un listino prezzi personale.",
-      "Etichetta: compila prodotto, prezzo, quantita, unita, prezzo_unitario; righe vuoto. Scontrino: compila righe e store; gli altri campi vuoti o 0.",
+      "Etichetta: compila prodotto, marca, prezzo, quantita, unita, prezzo_unitario; righe vuoto. Scontrino: compila righe e store; gli altri campi vuoti o 0.",
       "Scontrino: abbina una riga a un prodotto dato solo se e' lo stesso articolo, altrimenti e' nuovo; per un prodotto nuovo usa un nome che dica cos'e', mai il nome di una categoria; peso o volume solo se e' scritto sulla riga, senza indovinare.",
       categorie.length ? `Categorie possibili: ${categorie.join(", ")}.` : "",
       store.length ? `Negozi gia' nel listino: ${store.join(", ")}.` : "",

@@ -46,7 +46,28 @@ export function formatPriceText(priceText) {
   return `${formattedValue}€${unit ? `/${unit}` : ""}`;
 }
 
-export function formatPriceForTable(priceText) {
+// Contenuto della confezione ("500 g", "3 x 100 g", "1L", "10 pz") in kg, litri o pezzi; null se non si legge
+// (quante ne stanno in un kg o in un litro: come IN_KG_O_L della Edge Function, si moltiplica prima di dividere)
+const MISURE = { g: [1000, "kg"], kg: [1, "kg"], ml: [1000, "l"], cl: [100, "l"], l: [1, "l"], pz: [1, "pz"], pezzo: [1, "pz"], pezzi: [1, "pz"] };
+function parseFormato(text) {
+  const match = String(text || "").trim().toLowerCase().replace(",", ".")
+    .match(/^(?:(\d+)\s*x\s*)?(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l|pz|pezzo|pezzi)$/);
+  if (!match) return null;
+  const [perUnit, unit] = MISURE[match[3]];
+  const count = Number(match[1] || 1) * Number(match[2]);
+  return count > 0 ? { count, perUnit, unit } : null;
+}
+
+// Prezzo al kg, al litro o al pezzo: dal prezzo stesso ("6,95€/kg", "0,99€/200g") o, per il prezzo
+// della confezione ("2,19€"), dal formato ("800 g"). null se non si puo' calcolare
+export function getUnitPrice(priceText, formato) {
+  const { value, unit } = parsePriceText(priceText);
+  if (typeof value !== "number") return null;
+  const size = unit ? parseFormato(/^\d/.test(unit) ? unit : `1 ${unit}`) : parseFormato(formato);
+  return size ? { value: (value * size.perUnit) / size.count, unit: size.unit } : null;
+}
+
+export function formatPriceForTable(priceText, formato = "") {
   const { value, unit } = parsePriceText(priceText);
   if (value === null) {
     return `
@@ -61,13 +82,30 @@ export function formatPriceForTable(priceText) {
   });
 
   const unitPart = unit ? `€/${unit}` : "€";
+  // Il prezzo al kg (o al litro, al pezzo) quando quello scritto e' della confezione: e' quello che ordina
+  const unitPrice = MISURE[String(unit || "").toLowerCase()] ? null : getUnitPrice(priceText, formato);
+  const unitPriceText = unitPrice
+    ? `${unitPrice.value.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${unitPrice.unit}`
+    : "";
 
   return `
     <div class="price-table-cell">
       <span class="price-value">${formattedValue}</span>
       <span class="price-unit">${escapeHtml(unitPart)}</span>
+      ${unitPriceText ? `<span class="price-per-unit">${escapeHtml(unitPriceText)}</span>` : ""}
     </div>
   `.trim();
+}
+
+// Marca e formato accanto al nome, se non li dicono gia' il nome, lo Store (la marca del negozio) o il prezzo ("0,99€/200g")
+export function getProductDetails(row) {
+  const key = (text) => normalizeAlphabetSource(text).toLowerCase().replace(/\s+/g, "");
+  const name = key(row?.prodotto);
+  const alreadyShown = [key(row?.Store_name), key(parsePriceText(row?.prezzo).unit)];
+  return [row?.marca, row?.formato]
+    .map((part) => String(part || "").trim())
+    .filter((part) => part && !name.includes(key(part)) && !alreadyShown.includes(key(part)))
+    .join(" · ");
 }
 
 export function normalizeQuantity(value, fallback = 1) {
@@ -83,6 +121,11 @@ export function getSortablePriceValue(row) {
     return Number.POSITIVE_INFINITY;
   }
 
+  // Al kg o al litro anche quando e' scritto per confezione; al pezzo no (resta il prezzo scritto, come prima)
+  const unitPrice = getUnitPrice(row.prezzo, row.formato);
+  if (unitPrice && unitPrice.unit !== "pz") {
+    return unitPrice.value;
+  }
   const parsedPrice = parsePriceText(row.prezzo);
   return Number.isFinite(parsedPrice.value) ? parsedPrice.value : Number.POSITIVE_INFINITY;
 }

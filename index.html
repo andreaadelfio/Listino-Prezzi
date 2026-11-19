@@ -15,7 +15,7 @@
     <link rel="manifest" href="./manifest.webmanifest">
     <link rel="icon" type="image/svg+xml" href="./assets/cart-icon.svg">
     <link rel="apple-touch-icon" href="./assets/cart-icon.svg">
-    <link rel="stylesheet" href="./assets/styles.css?v=20261119-2">
+    <link rel="stylesheet" href="./assets/styles.css?v=20261119-3">
   </head>
   <body class="senza-owner">
     <div id="loading-overlay" class="loading-overlay hidden" aria-hidden="true">
@@ -148,6 +148,10 @@
                       ></button>
                       <span id="product-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
                     </div>
+                    <!-- Marca e formato: compaiono quando si scrive un prodotto o se ne modifica uno -->
+                    <div class="product-input-shell entry-detail entry-detail-brand">
+                      <input id="brand-input" class="product-input" form="price-form" name="marca" type="text" placeholder="Marca" aria-label="Marca" autocomplete="off">
+                    </div>
                   </td>
                   <td data-label="Prezzo">
                     <div class="product-input-shell">
@@ -160,6 +164,9 @@
                         title="Applica suggerimento prezzo"
                       ></button>
                       <span id="price-inline-measure" class="product-inline-measure" aria-hidden="true"></span>
+                    </div>
+                    <div class="product-input-shell entry-detail entry-detail-size">
+                      <input id="size-input" class="product-input" form="price-form" name="formato" type="text" placeholder="Formato, es. 500 g" aria-label="Formato della confezione" title="Contenuto della confezione: serve per il prezzo al kg" autocomplete="off">
                     </div>
                   </td>
                   <td data-label="Store">
@@ -341,7 +348,7 @@
 
     <!-- Versione esatta: un aggiornamento di supabase-js non cambia il sito da solo; resta nella cache del browser (immutable) e funziona anche senza rete -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
-    <script src="./assets/config.js?v=20261119-2"></script>
-    <script type="module" src="./assets/app.js?v=20261119-2"></script>
+    <script src="./assets/config.js?v=20261119-3"></script>
+    <script type="module" src="./assets/app.js?v=20261119-3"></script>
   </body>
 </html>

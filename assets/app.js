@@ -23,6 +23,7 @@ import {
   focusWithoutTouchKeyboard,
   formatPriceText,
   formatPriceForTable,
+  getProductDetails,
   getProductAlphabetLetter,
   getRowQuantityValue,
   getSortablePriceValue,
@@ -702,6 +703,11 @@ function applyLabelExtractionToForm(extraction) {
     renderPriceInlineSuggestion();
   }
 
+  const marca = String(extraction?.marca || "").trim();
+  const formato = String(extraction?.formato || "").trim();
+  if (marca && elements.brandInput) elements.brandInput.value = marca;
+  if (formato && elements.sizeInput) elements.sizeInput.value = formato;
+
   if (extraction?.storeName) {
     applyExtractedStoreToForm(extraction.storeName);
   }
@@ -902,16 +908,18 @@ async function handleReceiptSave() {
     }
   }
   const results = await Promise.all([
-    ...updates.map(({ row, price }) => state.supabaseClient
+    ...updates.map(({ row, price, campi }) => state.supabaseClient
       .from("listino_prezzi_raw")
-      .update(getPricePayload(price))
+      .update({ ...getPricePayload(price), ...campi })
       .eq("id", row.id)
       .eq("owner", state.currentOwner)),
-    inserts.length ? state.supabaseClient.from("listino_prezzi_raw").insert(inserts.map(({ prodotto, price, categoryName }) => ({
+    inserts.length ? state.supabaseClient.from("listino_prezzi_raw").insert(inserts.map(({ prodotto, price, categoryName, marca = null, formato = null }) => ({
       owner: state.currentOwner,
       prodotto,
       retailer_id: Number(storeId),
       category_id: findCategoryByName(categoryName)?.id ?? null,
+      marca,
+      formato,
       ...getPricePayload(price)
     }))) : { error: null }
   ]);
@@ -1825,6 +1833,8 @@ function setPriceFormMode(mode, row = null) {
       // Come nella lista ("1,50€/l"), non com'e' salvato ("1.5€/l")
       elements.priceInput.value = formatPriceText(row.prezzo || "");
     }
+    if (elements.brandInput) elements.brandInput.value = row.marca || "";
+    if (elements.sizeInput) elements.sizeInput.value = row.formato || "";
     setPriceSubmitIcon("edit");
     state.StoreSearchTerm = "";
     state.categorySearchTerm = "";
@@ -2656,10 +2666,11 @@ function renderRows() {
               title="Modifica ${escapeHtml(group.product)}"
             >
               <span class="category-link-text">${escapeHtml(group.product)}</span>
+              ${getProductDetails(row) ? `<span class="product-details">${escapeHtml(getProductDetails(row))}</span>` : ""}
             </a>
           </div>
         </td>
-        <td data-label="Prezzo">${formatPriceForTable(row.prezzo)}</td>
+        <td data-label="Prezzo">${formatPriceForTable(row.prezzo, row.formato)}</td>
         <td data-label="Store">
           <div class="row-Store-cell">
             <a
@@ -2848,6 +2859,8 @@ async function loadRows() {
       retailer_id,
       category_id,
       prezzo,
+      formato,
+      marca,
       created_at,
       owner
     `)
@@ -3406,6 +3419,8 @@ async function handlePriceSubmit(event) {
       prodotto,
       retailer_id: StoreId,
       category_id: categoriaInfo.categoryId,
+      marca: String(formData.get("marca") || "").trim() || null,
+      formato: String(formData.get("formato") || "").trim() || null,
       ...getPricePayload(prezzo)
     };
     

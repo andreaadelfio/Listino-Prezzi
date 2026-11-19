@@ -899,6 +899,36 @@ td[data-label="Prezzo"] {
   text-align: left;
 }
 
+/* Prezzo al kg (o al litro, al pezzo) calcolato dal formato: e' quello che ordina per prezzo */
+.price-per-unit {
+  grid-column: 1 / -1;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+/* Marca e formato accanto al nome, quando il nome non li dice gia'; vanno sotto se non c'e' posto */
+.product-cell .category-link {
+  flex-wrap: wrap;
+  column-gap: 0.35rem;
+  row-gap: 0;
+}
+
+.product-details {
+  font-size: 0.85em;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+/* Marca e formato nel form: sotto prodotto e prezzo, solo quando si scrive un prodotto o se ne modifica uno */
+.entry-detail {
+  margin-top: 0.35rem;
+}
+
+.entry-row:not(.entry-row-editing):has(#product-input:placeholder-shown) .entry-detail {
+  display: none;
+}
+
 .product-cell {
   display: flex;
   align-items: center;
@@ -1432,10 +1462,20 @@ td.entry-actions-cell {
     box-shadow: inset 0 -1px 0 rgba(31, 42, 36, 0.1);
   }
 
+  /* Con un prodotto scritto (o in modifica) marca e formato stanno su una riga fra ricerca e prezzo */
+  .entry-row:has(#product-input:not(:placeholder-shown)) {
+    grid-template-areas:
+      "prod prod prod reset photo"
+      "brand brand size size size"
+      "price store cat cat add";
+  }
+
   /* In modifica il cestino sta in alto, prima di ×: la categoria resta larga come quando si aggiunge */
-  .entry-row.entry-row-editing {
+  .entry-row.entry-row-editing,
+  .entry-row.entry-row-editing:has(#product-input:not(:placeholder-shown)) {
     grid-template-areas:
       "prod prod delete reset photo"
+      "brand brand size size size"
       "price store cat cat add";
   }
 
@@ -1456,8 +1496,14 @@ td.entry-actions-cell {
     display: none;
   }
 
-  .entry-row td[data-label="Prodotto"] { grid-area: prod; }
-  .entry-row td[data-label="Prezzo"] { grid-area: price; }
+  /* Le celle di prodotto e prezzo si aprono: i loro campi (e marca e formato) vanno nella griglia */
+  .entry-row td[data-label="Prodotto"],
+  .entry-row td[data-label="Prezzo"] { display: contents; }
+  .entry-row td[data-label="Prodotto"] > .product-input-shell:not(.entry-detail) { grid-area: prod; min-width: 0; }
+  .entry-row td[data-label="Prezzo"] > .product-input-shell:not(.entry-detail) { grid-area: price; min-width: 0; }
+  .entry-detail-brand { grid-area: brand; }
+  .entry-detail-size { grid-area: size; }
+  .entry-row .entry-detail { margin-top: 0; min-width: 0; }
   .entry-row td[data-label="Store"] { grid-area: store; }
   .entry-row td[data-label="Categoria"] { grid-area: cat; }
   #label-photo-button { grid-area: photo; }

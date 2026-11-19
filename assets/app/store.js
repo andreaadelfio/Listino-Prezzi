@@ -73,6 +73,8 @@ export const elements = {
   ownerStatus: document.querySelector("#owner-status"),
   refreshButton: document.querySelector("#refresh-button"),
   priceForm: document.querySelector("#price-form"),
+  brandInput: document.querySelector("#brand-input"),
+  sizeInput: document.querySelector("#size-input"),
   productInput: document.querySelector("#product-input"),
   priceInput: document.querySelector("#price-input"),
   priceInlineSuggestion: document.querySelector("#price-inline-suggestion"),

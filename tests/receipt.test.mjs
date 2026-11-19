@@ -153,3 +153,29 @@ test("non usate: si possono aggiungere, compilate con nome e prezzo letti", () =
     { kind: "updated", testo: "FILETTI DI SGOMBRO P", row: rows[0], prodotto: "Mozzarella", price: "1,29€", categoryName: "Latte e derivati" }
   ]);
 });
+
+// Colonne marca e formato: lette da Gemini, vanno nelle righe nuove; in quelle che ci sono gia'
+// riempiono solo i campi vuoti (non si cambia cio' che Andrea ha scritto)
+test("marca e formato letti: nelle righe nuove, e in quelle esistenti solo se mancano", () => {
+  const conFormato = [...rows, { id: 9, prodotto: "Passata", retailer_id: 6, prezzo: "1,10€", formato: "690 g", marca: "Cirio", categoria: "Conserve" }];
+  const lette = classifyReceiptLines([
+    { testo: "POMODORINI FF G400 1,39", prodotto: "Pomodorini", esistente: false, price: "3,48€/kg", marca: "", formato: "400 g", categoryName: "Verdura" },
+    { testo: "MOZZ.FIOR.LATTE GRANAROLO 1,29", prodotto: "Mozzarella", esistente: true, price: "1,29€", marca: "Granarolo", formato: "125 g", categoryName: "" },
+    { testo: "PASSATA CIRIO 700G 1,19", prodotto: "Passata", esistente: true, price: "1,19€", marca: "Cirio", formato: "700 g", categoryName: "" }
+  ], STORE, conFormato);
+  const { updates, inserts } = receiptOperations(receiptItems(lette));
+  assert.deepEqual(inserts, [{ prodotto: "Pomodorini", price: "3,48€/kg", categoryName: "Verdura", formato: "400 g" }]);
+  assert.deepEqual(updates.map(({ row, price, campi = {} }) => ({ id: row.id, price, campi })), [
+    { id: 1, price: "1,29€", campi: { marca: "Granarolo", formato: "125 g" } },
+    { id: 9, price: "1,19€", campi: {} }
+  ]);
+});
+
+test("riga non usata aggiunta a mano: porta con se' marca e formato letti", () => {
+  const { skipped } = classifyReceiptLines([
+    { testo: "SALVASLIP 1,99", prodotto: "Salvaslip", esistente: false, price: "", marca: "Lines", formato: "20 pz", categoryName: "" }
+  ], STORE, rows);
+  const item = receiptItemFromSkipped({ ...skipped[0], price: "1,99€" });
+  assert.equal(item.marca, "Lines");
+  assert.equal(item.formato, "20 pz");
+});

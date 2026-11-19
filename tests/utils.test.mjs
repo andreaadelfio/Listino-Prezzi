@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clearEntryFormState, extractEmojiAndName, fetchWithTimeout, formatPriceText, groupByCategory, makeListinoSnapshot, rankVocabularyWords, readListinoSnapshot } from "../assets/app/utils.js";
+import { clearEntryFormState, extractEmojiAndName, fetchWithTimeout, formatPriceForTable, formatPriceText, getProductDetails, getSortablePriceValue, getUnitPrice, groupByCategory, makeListinoSnapshot, rankVocabularyWords, readListinoSnapshot } from "../assets/app/utils.js";
 
 test("formatPriceText_come_nella_tabella", () => {
   assert.equal(formatPriceText("3.4€"), "3,40€");
@@ -98,4 +98,67 @@ test("selezionati: gruppi per categoria in ordine alfabetico, Altro in fondo", (
   assert.deepEqual(gruppi.map(([titolo, voci]) => [titolo, voci.map((v) => v.product)]), [
     ["🛒 Alimentari", ["Pane"]], ["🍎 Frutta", ["Mele", "Pere"]], ["❄️ Surgelati", ["Lamponi"]], ["Altro", ["Crostini"]]
   ]);
+});
+
+// Colonna formato: prezzo al kg, al litro o al pezzo, fatto a mano (2,19 € per 800 g = 2,7375 €/kg)
+test("prezzo al kg, al litro o al pezzo: dal prezzo o dal formato", () => {
+  const casi = [
+    ["6,95€/kg", "", 6.95, "kg"],
+    ["3€/L", "1 l", 3, "l"],
+    ["0.99€/200g", "", 4.95, "kg"],
+    ["2.8€/300g", "3 x 100 g", 9.3333, "kg"],
+    ["2.19€", "800 g", 2.7375, "kg"],
+    ["2.19€", "800g", 2.7375, "kg"],
+    ["2.79€/650ml", "", 4.2923, "l"],
+    ["1.19€/15pz", "", 0.0793, "pz"],
+    ["1,20€", "75 cl", 1.6, "l"],
+    ["1,49€", "0,5 kg", 2.98, "kg"],
+    ["0.39€/pezzo", "", 0.39, "pz"],
+    ["2.99€", "", null],
+    ["??€/kg", "500 g", null],
+    ["2.99€", "una retina", null],
+    ["2.99€", "0 g", null]
+  ];
+  for (const [prezzo, formato, valore, unita] of casi) {
+    const letto = getUnitPrice(prezzo, formato);
+    if (valore === null) {
+      assert.equal(letto, null, `${prezzo} ${formato}`);
+      continue;
+    }
+    assert.ok(Math.abs(letto.value - valore) < 0.0001, `${prezzo} ${formato}: ${letto?.value}`);
+    assert.equal(letto.unit, unita, `${prezzo} ${formato}`);
+  }
+});
+
+test("ordinamento per prezzo: al kg se il formato lo permette, altrimenti il prezzo scritto", () => {
+  assert.equal(getSortablePriceValue({ prezzo: "2.19€", formato: "800 g" }), 2.7375);
+  assert.equal(getSortablePriceValue({ prezzo: "0.99€/200g" }), 4.95);
+  assert.equal(getSortablePriceValue({ prezzo: "2.99€" }), 2.99);
+  assert.equal(getSortablePriceValue({ prezzo: "1.19€/15pz" }), 1.19);
+  assert.equal(getSortablePriceValue({ prezzo: "0.69€", formato: "3 pz" }), 0.69);
+  assert.equal(getSortablePriceValue({ prezzo: "??€/kg", formato: "500 g" }), Number.POSITIVE_INFINITY);
+  // Cosi' 2,19 € per 800 g (2,74 €/kg) viene prima di 1,25 € per 300 g (4,17 €/kg)
+  assert.ok(getSortablePriceValue({ prezzo: "2.19€", formato: "800 g" }) < getSortablePriceValue({ prezzo: "1.25€", formato: "300 g" }));
+});
+
+test("tabella: il prezzo al kg calcolato compare solo se il prezzo non lo dice gia'", () => {
+  assert.match(formatPriceForTable("2.19€", "800 g"), /2,74 €\/kg/);
+  assert.match(formatPriceForTable("0.99€/200g", ""), /4,95 €\/kg/);
+  assert.doesNotMatch(formatPriceForTable("6.95€/kg", "500 g"), /price-per-unit/);
+  assert.doesNotMatch(formatPriceForTable("2.99€", ""), /price-per-unit/);
+});
+
+test("marca e formato accanto al nome, senza ripetere nome o Store", () => {
+  const casi = [
+    [{ prodotto: "Mozzarella Granarolo", marca: "Granarolo", formato: "3 x 100 g", Store_name: "Lidl" }, "3 x 100 g"],
+    [{ prodotto: "Panna da cucina", marca: "Conad", formato: "", Store_name: "Conad" }, ""],
+    [{ prodotto: "Yogurt greco", marca: null, formato: "170 g", Store_name: "Lidl" }, "170 g"],
+    [{ prodotto: "Pesto genovese", marca: "Rana", formato: "", Store_name: "Lidl" }, "Rana"],
+    [{ prodotto: "Pasta", marca: "Barilla", formato: "500 g", Store_name: "Lidl" }, "Barilla · 500 g"],
+    [{ prodotto: "Uova medie 10pz", marca: "", formato: "10 pz", Store_name: "Lidl" }, ""],
+    [{ prodotto: "Müller dessert", marca: "Muller", formato: "", Store_name: "Lidl" }, ""],
+    [{ prodotto: "Banane" }, ""],
+    [{ prodotto: "Besciamella", formato: "200 g", prezzo: "1,09€/200g", Store_name: "Lidl" }, ""]
+  ];
+  for (const [row, atteso] of casi) assert.equal(getProductDetails(row), atteso, row.prodotto);
 });
