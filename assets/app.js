@@ -11,7 +11,7 @@ import {
   TABLE_COLUMN_COUNT
 } from "./app/constants.js";
 import { createProductGroupsSelector } from "./app/groups.js";
-import { classifyReceiptLines, receiptItems, receiptOperations } from "./app/receipt.js";
+import { classifyReceiptLines, receiptItemFromSkipped, receiptItems, receiptOperations } from "./app/receipt.js";
 import { elements, state } from "./app/store.js";
 import {
   clearEntryFormState,
@@ -746,6 +746,7 @@ function classifyReceipt() {
   receipt.classified = receipt.storeId ? classifyReceiptLines(receipt.righe, receipt.storeId, state.rows) : null;
   // Le proposte da correggere; cambiando Store si ricalcolano da capo
   receipt.items = receipt.classified ? receiptItems(receipt.classified) : [];
+  receipt.skipped = receipt.classified ? [...receipt.classified.skipped] : [];
 }
 
 function handleReceiptStoreChange() {
@@ -761,7 +762,7 @@ function handleReceiptStoreChange() {
 // Ogni proposta si corregge nella sua riga (aggiornata: il prezzo; nuova: nome, prezzo e categoria),
 // il cestino la toglie, il + in fondo ne aggiunge una. Salva scrive quelle con nome e prezzo.
 function renderReceiptDialog() {
-  const { storeName, classified, items } = state.receipt;
+  const { storeName, classified, items, skipped } = state.receipt;
   elements.receiptTitle.textContent = storeName ? `Scontrino ${storeName}` : "Scontrino";
 
   if (!classified) {
@@ -805,11 +806,13 @@ function renderReceiptDialog() {
       ${source(item.testo)}
       ${removeButton(item, index)}
     </div>`);
-  const skippedLines = classified.skipped.map(({ testo, prodotto, reason }) => `
+  // Le non usate si possono aggiungere lo stesso: il + le porta fra le righe da correggere
+  const skippedLines = skipped.map(({ testo, prodotto, reason }, index) => `
     <div class="receipt-line receipt-line-skipped">
       <span class="receipt-line-name">${escapeHtml(prodotto || testo)}</span>
       <span class="receipt-line-detail">${escapeHtml(reason)}</span>
       ${source(testo)}
+      <button type="button" class="primary-button compact-button icon-button" data-receipt-include="${index}" aria-label="Aggiungi ${escapeHtml(prodotto || "questa riga")}" title="Aggiungi">+</button>
     </div>`);
   const addButton = `<button type="button" class="primary-button compact-button icon-button receipt-add-button" data-receipt-add aria-label="Aggiungi una riga" title="Aggiungi una riga">+</button>`;
 
@@ -835,6 +838,13 @@ function handleReceiptLinesClick(event) {
   const removeButton = event.target.closest("[data-receipt-remove]");
   if (removeButton) {
     receipt.items.splice(Number(removeButton.dataset.receiptRemove), 1);
+    renderReceiptDialog();
+    return;
+  }
+  const includeButton = event.target.closest("[data-receipt-include]");
+  if (includeButton) {
+    const [entry] = receipt.skipped.splice(Number(includeButton.dataset.receiptInclude), 1);
+    if (entry) receipt.items.push(receiptItemFromSkipped(entry));
     renderReceiptDialog();
     return;
   }

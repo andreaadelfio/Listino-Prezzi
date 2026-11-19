@@ -23,18 +23,23 @@ export function classifyReceiptLines(righe, storeId, rows) {
     visti.add(chiave);
 
     const price = String(riga.price || "").trim();
+    const stessoNome = rows.filter((row) => nomeChiave(row.prodotto) === chiave);
+    const nelloStore = stessoNome.find((row) => String(row.retailer_id) === String(storeId));
+    // Una riga non usata tiene quello che si e' letto: Andrea puo' aggiungerla lo stesso (receiptItemFromSkipped)
+    const nonUsata = (reason, nome = prodotto) => skipped.push({
+      testo: riga.testo, prodotto: nome, reason, price, row: nelloStore,
+      categoryName: nelloStore?.categoria || stessoNome[0]?.categoria || riga.categoryName || ""
+    });
     if (!price) {
-      skipped.push({ testo: riga.testo, prodotto, reason: riga.incompleto ? "venduto a peso, manca il prezzo al kg" : "prezzo non letto" });
+      nonUsata(riga.incompleto ? "venduto a peso, manca il prezzo al kg" : "prezzo non letto");
       continue;
     }
 
-    const stessoNome = rows.filter((row) => nomeChiave(row.prodotto) === chiave);
     // Gemini dice "nuovo" ma usa il nome di un prodotto che c'e' gia': risposta contraddittoria
     if (riga.esistente === false && stessoNome.length) {
-      skipped.push({ testo: riga.testo, prodotto, reason: "abbinamento incerto" });
+      nonUsata("abbinamento incerto");
       continue;
     }
-    const nelloStore = stessoNome.find((row) => String(row.retailer_id) === String(storeId));
     if (!nelloStore) {
       // Nuovo, o gia' presente in un altro Store: allora tiene il suo nome e la sua categoria
       added.push({
@@ -47,9 +52,9 @@ export function classifyReceiptLines(righe, storeId, rows) {
     }
 
     if (unitaChiave(nelloStore.prezzo) !== unitaChiave(price)) {
-      skipped.push({ testo: riga.testo, prodotto: nelloStore.prodotto, reason: `hai ${formatPriceText(nelloStore.prezzo)}, scontrino ${formatPriceText(price)}` });
+      nonUsata(`hai ${formatPriceText(nelloStore.prezzo)}, scontrino ${formatPriceText(price)}`, nelloStore.prodotto);
     } else if (parsePriceText(nelloStore.prezzo).value === parsePriceText(price).value) {
-      skipped.push({ testo: riga.testo, prodotto: nelloStore.prodotto, reason: "prezzo uguale" });
+      nonUsata("prezzo uguale", nelloStore.prodotto);
     } else {
       updated.push({ testo: riga.testo, row: nelloStore, price });
     }
@@ -76,4 +81,12 @@ export function receiptOperations(items) {
     updates: complete.filter((item) => item.kind === "updated").map(({ row, price }) => ({ row, price })),
     inserts: complete.filter((item) => item.kind === "added").map(({ prodotto, price, categoryName }) => ({ prodotto, price, categoryName }))
   };
+}
+
+// Una riga non usata, aggiunta a mano dalla finestrella: se il prodotto e' gia' in quello Store ne
+// aggiorna la riga (niente doppioni), altrimenti e' una riga nuova. Si corregge come le altre.
+export function receiptItemFromSkipped({ testo, prodotto, price, categoryName, row }) {
+  return row
+    ? { kind: "updated", testo, row, prodotto: row.prodotto, price: price || "", categoryName: row.categoria || "" }
+    : { kind: "added", testo, prodotto, price: price || "", categoryName: categoryName || "" };
 }

@@ -1,7 +1,7 @@
 // Regola delle righe dello scontrino: quali aggiornano, quali sono nuove, quali non si usano
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyReceiptLines, receiptItems, receiptOperations } from "../assets/app/receipt.js";
+import { classifyReceiptLines, receiptItemFromSkipped, receiptItems, receiptOperations } from "../assets/app/receipt.js";
 
 const STORE = "6";
 // state.rows e' ordinato dal piu' recente
@@ -136,4 +136,20 @@ test("salvataggio: solo le righe con nome e prezzo, con le correzioni di Andrea"
       { prodotto: "Zucchine", price: "2,49€/kg", categoryName: "" }
     ]
   });
+});
+
+// Punto 8 (19/11): le righe non usate entrano con un tocco, gia' compilate con quello che ha letto Gemini.
+// Prodotto gia' in quello Store (prezzo uguale, unita' diversa): diventa un aggiornamento di quella
+// riga, non un doppione; altrimenti una riga nuova.
+test("non usate: si possono aggiungere, compilate con nome e prezzo letti", () => {
+  const { skipped } = classifyReceiptLines([
+    riga("Succo ananas", "1,98€", { testo: "SUCCO ANANAS 1,98" }),
+    riga("Zucchine", "", { testo: "ZUCCHINE 2,18", incompleto: true, categoryName: "Verdura" }),
+    riga("Mozzarella", "1,29€", { esistente: false, testo: "FILETTI DI SGOMBRO P", categoryName: "Pesce" })
+  ], STORE, rows);
+  assert.deepEqual(skipped.map(receiptItemFromSkipped), [
+    { kind: "updated", testo: "SUCCO ANANAS 1,98", row: rows[1], prodotto: "Succo ananas", price: "1,98€", categoryName: "Bevande" },
+    { kind: "added", testo: "ZUCCHINE 2,18", prodotto: "Zucchine", price: "", categoryName: "Verdura" },
+    { kind: "updated", testo: "FILETTI DI SGOMBRO P", row: rows[0], prodotto: "Mozzarella", price: "1,29€", categoryName: "Latte e derivati" }
+  ]);
 });
