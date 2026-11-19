@@ -59,6 +59,8 @@ create table if not exists listino.listino_prezzi_raw (
   prezzo text not null,
   prezzo_valore numeric(10, 2),
   prezzo_unita text,
+  formato text,
+  marca text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   created_by uuid references auth.users(id),
