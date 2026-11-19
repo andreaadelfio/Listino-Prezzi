@@ -1,3 +1,5 @@
+-- approvato da Andrea
+-- (in chat il 19/11/2026, dopo la tabella in Listino-formato-marca-19-11.md: "vanno bene")
 -- Listino di Andrea, 19/11: categorie e nomi piu' chiari, Store giusti per i prodotti Conad e Pam,
 -- doppioni, marca e formato. Chiesto da Andrea in chat il 19/11 ("ok categorie, e fai la colonna formato",
 -- "ok aggiungi anche formato e marca", e le risposte sulle voci incerte).
