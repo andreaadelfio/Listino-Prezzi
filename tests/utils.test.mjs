@@ -154,7 +154,7 @@ test("marca e formato accanto al nome, senza ripetere nome o Store", () => {
     [{ prodotto: "Panna da cucina", marca: "Conad", formato: "", Store_name: "Conad" }, ""],
     [{ prodotto: "Yogurt greco", marca: null, formato: "170 g", Store_name: "Lidl" }, "170 g"],
     [{ prodotto: "Pesto genovese", marca: "Rana", formato: "", Store_name: "Lidl" }, "Rana"],
-    [{ prodotto: "Pasta", marca: "Barilla", formato: "500 g", Store_name: "Lidl" }, "Barilla · 500 g"],
+    [{ prodotto: "Pasta", marca: "Barilla", formato: "500 g", Store_name: "Lidl" }, "Barilla 500 g"],
     [{ prodotto: "Uova medie 10pz", marca: "", formato: "10 pz", Store_name: "Lidl" }, ""],
     [{ prodotto: "Müller dessert", marca: "Muller", formato: "", Store_name: "Lidl" }, ""],
     [{ prodotto: "Banane" }, ""],

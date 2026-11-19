@@ -2665,8 +2665,7 @@ function renderRows() {
               data-row-id="${row.id}"
               title="Modifica ${escapeHtml(group.product)}"
             >
-              <span class="category-link-text">${escapeHtml(group.product)}</span>
-              ${getProductDetails(row) ? `<span class="product-details">${escapeHtml(getProductDetails(row))}</span>` : ""}
+              <span class="category-link-text">${escapeHtml([group.product, getProductDetails(row)].filter(Boolean).join(" "))}</span>
             </a>
           </div>
         </td>

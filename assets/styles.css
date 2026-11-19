@@ -907,19 +907,6 @@ td[data-label="Prezzo"] {
   color: var(--ink-soft);
 }
 
-/* Marca e formato accanto al nome, quando il nome non li dice gia'; vanno sotto se non c'e' posto */
-.product-cell .category-link {
-  flex-wrap: wrap;
-  column-gap: 0.35rem;
-  row-gap: 0;
-}
-
-.product-details {
-  font-size: 0.85em;
-  font-weight: 400;
-  color: var(--ink-soft);
-}
-
 /* Marca e formato nel form: sotto prodotto e prezzo, solo quando si scrive un prodotto o se ne modifica uno */
 .entry-detail {
   margin-top: 0.35rem;
@@ -1560,12 +1547,13 @@ td.entry-actions-cell {
   }
 
   /* Righe prodotto a due linee: nome e prezzo, sotto Store e categoria; casella a destra per il pollice */
+  /* Il prezzo (valore e unita') sta sulla linea del nome, il prezzo al kg su quella di Store e categoria */
   #rows-body tr[data-product] {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto 2.6rem;
+    grid-template-columns: auto minmax(0, 1fr) auto minmax(4.5ch, auto) 2.6rem;
     grid-template-areas:
-      "prod prod price sel"
-      "store cat cat sel";
+      "prod prod pval punit sel"
+      "store cat cat cat sel";
     align-items: center;
     column-gap: 0.4rem;
     min-height: 3.4rem;
@@ -1581,7 +1569,22 @@ td.entry-actions-cell {
 
   #rows-body td.selection-cell { grid-area: sel; }
   #rows-body td[data-label="Prodotto"] { grid-area: prod; }
-  #rows-body td[data-label="Prezzo"] { grid-area: price; padding: 0; }
+  #rows-body tr[data-product]:has(.price-per-unit) {
+    grid-template-areas:
+      "prod prod pval punit sel"
+      "store cat ppu ppu sel";
+  }
+  #rows-body td[data-label="Prezzo"],
+  #rows-body .price-table-cell { display: contents; }
+  #rows-body .price-value { grid-area: pval; }
+  #rows-body .price-unit { grid-area: punit; }
+  #rows-body .price-per-unit { grid-area: ppu; }
+  #rows-body td[data-label="Prodotto"],
+  #rows-body .price-value,
+  #rows-body .price-unit,
+  #rows-body td[data-label="Store"],
+  #rows-body td[data-label="Categoria"],
+  #rows-body .price-per-unit { align-self: baseline; }
   #rows-body td[data-label="Store"] { grid-area: store; }
   #rows-body td[data-label="Categoria"] { grid-area: cat; }
 

@@ -105,7 +105,7 @@ export function getProductDetails(row) {
   return [row?.marca, row?.formato]
     .map((part) => String(part || "").trim())
     .filter((part) => part && !name.includes(key(part)) && !alreadyShown.includes(key(part)))
-    .join(" · ");
+    .join(" ");
 }
 
 export function normalizeQuantity(value, fallback = 1) {
