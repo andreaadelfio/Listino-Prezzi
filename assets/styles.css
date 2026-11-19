@@ -671,6 +671,10 @@ select {
 .selected-row-item {
   cursor: pointer;
   transition: opacity 0.2s, text-decoration 0.2s;
+  /* La pressione lunga porta al prodotto: niente selezione del testo ne' menu del telefono */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .selected-row-item.crossed-out {
@@ -1107,7 +1111,8 @@ td.entry-actions-cell {
   background: rgba(166, 75, 42, 0.12);
 }
 
-.product-jump-target td {
+.product-jump-target td,
+#rows-body tr.product-jump-target {
   background: rgba(166, 75, 42, 0.12);
 }
 

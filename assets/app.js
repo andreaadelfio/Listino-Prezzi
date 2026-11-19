@@ -3,6 +3,7 @@ import {
   FEEDBACK_DISMISS_MS,
   FILTER_INPUT_DEBOUNCE_MS,
   LETTURA_TIMEOUT_MS,
+  LONG_PRESS_MS,
   OWNER_CACHE_KEY,
   QUANTITY_UPDATE_DEBOUNCE_MS,
   SAVED_LISTINO_KEY,
@@ -368,7 +369,7 @@ function findVisibleProductRow(product) {
     .find((row) => row.getAttribute("data-product") === normalizedProduct) || null;
 }
 
-function revealProductInTable(product) {
+function revealProductInTable(product, behavior = "smooth") {
   const normalizedProduct = String(product || "").trim();
   if (!normalizedProduct) {
     return;
@@ -388,9 +389,49 @@ function revealProductInTable(product) {
     return;
   }
 
-  scrollListToRow(targetRow);
+  scrollListToRow(targetRow, behavior);
 
   highlightProductRow(targetRow);
+}
+
+// Pressione lunga su un selezionato: porta al prodotto nel listino e lo evidenzia (il tocco breve
+// lo barra, come prima). Ci si muove di piu' di 10 px: e' uno scorrimento, non una pressione.
+function bindSelectedRowsLongPress() {
+  const list = elements.selectedRowsList;
+  if (!list) return;
+  let timer = null;
+  let start = null;
+  let longPressed = false;
+  const cancel = () => {
+    window.clearTimeout(timer);
+    timer = null;
+  };
+
+  list.addEventListener("pointerdown", (event) => {
+    const item = event.target.closest(".selected-row-item");
+    if (!item) return;
+    longPressed = false;
+    start = { x: event.clientX, y: event.clientY };
+    cancel();
+    timer = window.setTimeout(() => {
+      longPressed = true;
+      revealProductInTable(item.dataset.crossedProduct, "instant"); // salto subito, niente animazione lunga
+    }, LONG_PRESS_MS);
+  });
+  list.addEventListener("pointermove", (event) => {
+    if (timer && start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 10) cancel();
+  });
+  ["pointerup", "pointercancel", "pointerleave"].forEach((type) => list.addEventListener(type, cancel));
+  // Il clic che segue la pressione lunga non deve barrare il prodotto
+  list.addEventListener("click", (event) => {
+    if (longPressed) {
+      event.stopImmediatePropagation();
+      longPressed = false;
+    }
+  }, true);
+  list.addEventListener("contextmenu", (event) => {
+    if (event.target.closest(".selected-row-item")) event.preventDefault();
+  });
 }
 
 function getCachedOwner() {
@@ -1612,14 +1653,14 @@ function getListScroller() {
 }
 
 // Porta la riga appena sotto intestazione e form, che restano fermi in alto
-function scrollListToRow(row) {
+function scrollListToRow(row, behavior = "smooth") {
   const scroller = getListScroller();
   const headerOffset = Number.parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue("--alphabet-scroll-offset")
   ) || 0;
   const scrollerTop = scroller === document.scrollingElement ? 0 : scroller.getBoundingClientRect().top;
   const targetTop = row.getBoundingClientRect().top - scrollerTop + scroller.scrollTop - headerOffset;
-  scroller.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
+  scroller.scrollTo({ top: Math.max(targetTop, 0), behavior });
 }
 
 function handleScrollToTop() {
@@ -4033,6 +4074,7 @@ function bindEvents() {
   elements.scrollToTopButton?.addEventListener("click", handleScrollToTop);
   elements.shoppingSessionButton?.addEventListener("click", handleShoppingSessionToggle);
   elements.selectedRowsList?.addEventListener("click", handleSelectedRowClick);
+  bindSelectedRowsLongPress();
   elements.selectAllCheckbox?.addEventListener("pointerdown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("keydown", rememberSelectAllToggleIntent);
   elements.selectAllCheckbox?.addEventListener("change", handleSelectAllChange);

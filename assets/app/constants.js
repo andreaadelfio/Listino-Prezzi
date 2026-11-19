@@ -1,4 +1,4 @@
-export const APP_VERSION = "20261117-1";
+export const APP_VERSION = "20261119-1";
 export const TABLE_COLUMN_COUNT = 6;
 export const FEEDBACK_DISMISS_MS = 7000;
 export const QUANTITY_UPDATE_DEBOUNCE_MS = 650;
@@ -13,6 +13,8 @@ export const SESSION_URL_PARAM_KEYS = Object.freeze({
 });
 export const ALPHABET_INDEX_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 
+// Pressione lunga su un prodotto della lista dei selezionati (porta al prodotto nel listino)
+export const LONG_PRESS_MS = 500;
 // Letture da Supabase: oltre questo tempo si rinuncia e, se c'e', si mostra il listino salvato
 export const LETTURA_TIMEOUT_MS = 8000;
 // localStorage: ultimo listino caricato (vedi showSavedListino in app.js)
