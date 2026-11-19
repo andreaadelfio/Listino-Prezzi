@@ -1092,7 +1092,8 @@ td.entry-actions-cell {
 }
 
 .alphabet-divider-row td {
-  padding: 0.5rem 0.9rem;
+  /* A sinistra quanto casella di selezione + quantita': la lettera parte dove partono i nomi */
+  padding: 0.5rem 0.9rem 0.5rem 5.75rem;
   border-bottom: 1px solid rgba(166, 75, 42, 0.14);
   background: rgba(166, 75, 42, 0.08);
   color: var(--accent-deep);
@@ -1653,8 +1654,9 @@ td.entry-actions-cell {
   }
 
   /* Divisori alfabetici, messaggi di caricamento, vuoto ed errore */
-  .alphabet-divider-row td {
-    padding: 0.3rem 0.6rem;
+  /* Stesso rientro delle righe (padding-left 0.55rem): la lettera parte dove partono i nomi */
+  #rows-body .alphabet-divider-row td {
+    padding: 0.15rem 0.6rem 0.15rem 0.55rem;
   }
 
   #rows-body tr:not([data-product]):not(.alphabet-divider-row) td {
