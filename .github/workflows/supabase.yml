@@ -22,9 +22,9 @@ jobs:
 
       - name: Migrazioni SQL
         env:
-          # Basta il secret SUPABASE_DB_PASSWORD (la password così com'è, senza codificarla).
-          # Un vecchio SUPABASE_DB_URL completo, se c'è, ha la precedenza.
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL || 'postgresql://postgres.fvhzmkvqizfnbgxexdgu@aws-0-eu-west-2.pooler.supabase.com:5432/postgres' }}
+          # Con SUPABASE_DB_PASSWORD (la password così com'è) si usa l'indirizzo qui sotto e quella password;
+          # un vecchio SUPABASE_DB_URL completo vale solo se SUPABASE_DB_PASSWORD manca.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_PASSWORD == '' && secrets.SUPABASE_DB_URL || 'postgresql://postgres.fvhzmkvqizfnbgxexdgu@aws-0-eu-west-2.pooler.supabase.com:5432/postgres' }}
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: bash supabase/applica-migrazioni.sh "$REPO"
 
