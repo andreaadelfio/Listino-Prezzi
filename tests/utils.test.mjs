@@ -141,20 +141,40 @@ test("ordinamento per prezzo: al kg se il formato lo permette, altrimenti il pre
   assert.ok(getSortablePriceValue({ prezzo: "2.19€", formato: "800 g" }) < getSortablePriceValue({ prezzo: "1.25€", formato: "300 g" }));
 });
 
-test("tabella: il prezzo al kg calcolato compare solo se il prezzo non lo dice gia'", () => {
-  assert.match(formatPriceForTable("2.19€", "800 g"), /2,74 €\/kg/);
-  assert.match(formatPriceForTable("0.99€/200g", ""), /4,95 €\/kg/);
-  assert.doesNotMatch(formatPriceForTable("6.95€/kg", "500 g"), /price-per-unit/);
-  assert.doesNotMatch(formatPriceForTable("2.99€", ""), /price-per-unit/);
+// Andrea (19/11): sopra in grassetto il prezzo al kg o al litro, sotto quello della confezione; niente
+// spazio fra cifre ed euro ("3,49€/kg")
+test("tabella: sopra il prezzo al kg o al litro, sotto quello della confezione", () => {
+  const parti = (html) => ({
+    sopra: (html.match(/price-value">([^<]*)<\/span>\s*<span class="price-unit">([^<]*)</) || []).slice(1).join(""),
+    sotto: (html.match(/price-per-unit">([^<]*)</) || [])[1] || ""
+  });
+  assert.deepEqual(parti(formatPriceForTable("2.19€", "800 g")), { sopra: "2,74€/kg", sotto: "2,19€" });
+  assert.deepEqual(parti(formatPriceForTable("2.8€/300g", "3 x 100 g")), { sopra: "9,33€/kg", sotto: "2,80€/300g" });
+  assert.deepEqual(parti(formatPriceForTable("2.79€/650ml", "")), { sopra: "4,29€/l", sotto: "2,79€/650ml" });
+  assert.deepEqual(parti(formatPriceForTable("6.95€/kg", "500 g")), { sopra: "6,95€/kg", sotto: "" });
+  assert.deepEqual(parti(formatPriceForTable("2.99€", "")), { sopra: "2,99€", sotto: "" });
+  // Al pezzo non e' un prezzo unitario: sopra resta quello scritto, sotto quello al pezzo
+  assert.deepEqual(parti(formatPriceForTable("1.19€/15pz", "")), { sopra: "1,19€/15pz", sotto: "0,08€/pz" });
+});
+
+test("prezzi senza spazio fra cifre ed euro, anche se scritti con lo spazio", () => {
+  assert.equal(formatPriceText("3,49 €/kg"), "3,49€/kg");
+  assert.equal(formatPriceText("3,49 € / kg"), "3,49€/kg");
+  assert.equal(formatPriceText("1,20 €"), "1,20€");
+  for (const html of [formatPriceForTable("3,49 €/kg"), formatPriceForTable("2.19€", "800 g"), formatPriceForTable("1.19€/15pz")]) {
+    assert.doesNotMatch(html.replace(/<[^>]*>\s*/g, ""), /\d\s+€/);
+  }
 });
 
 test("marca e formato accanto al nome, senza ripetere nome o Store", () => {
   const casi = [
-    [{ prodotto: "Mozzarella Granarolo", marca: "Granarolo", formato: "3 x 100 g", Store_name: "Lidl" }, "3 x 100 g"],
+    [{ prodotto: "Mozzarella Granarolo", marca: "Granarolo", formato: "3 x 100 g", Store_name: "Lidl" }, "3\u00a0x\u00a0100\u00a0g"],
     [{ prodotto: "Panna da cucina", marca: "Conad", formato: "", Store_name: "Conad" }, ""],
-    [{ prodotto: "Yogurt greco", marca: null, formato: "170 g", Store_name: "Lidl" }, "170 g"],
+    [{ prodotto: "Yogurt greco", marca: null, formato: "170 g", Store_name: "Lidl" }, "170\u00a0g"],
     [{ prodotto: "Pesto genovese", marca: "Rana", formato: "", Store_name: "Lidl" }, "Rana"],
-    [{ prodotto: "Pasta", marca: "Barilla", formato: "500 g", Store_name: "Lidl" }, "Barilla 500 g"],
+    // Spazi non divisibili dentro marca e formato: "3 x 100 g" non si spezza a fine riga
+    [{ prodotto: "Pasta", marca: "Barilla", formato: "500 g", Store_name: "Lidl" }, "Barilla 500\u00a0g"],
+    [{ prodotto: "Mozzarella", marca: "Mondo Natura", formato: "3 x 100 g", Store_name: "Lidl" }, "Mondo\u00a0Natura 3\u00a0x\u00a0100\u00a0g"],
     [{ prodotto: "Uova medie 10pz", marca: "", formato: "10 pz", Store_name: "Lidl" }, ""],
     [{ prodotto: "Müller dessert", marca: "Muller", formato: "", Store_name: "Lidl" }, ""],
     [{ prodotto: "Banane" }, ""],

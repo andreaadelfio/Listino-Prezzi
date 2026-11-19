@@ -882,7 +882,7 @@ td[data-label="Prezzo"] {
 .price-table-cell {
   display: inline-grid;
   grid-template-columns: 1fr 4.5ch; /* Spazio fisso per l'unità per allineare le virgole */
-  gap: 0.4ch;
+  gap: 0; /* "3,49€/kg", senza spazio (Andrea) */
   /* Font del sito con cifre a larghezza fissa (allinea le virgole): i monospace di prima su Android
      non ci sono e veniva fuori un monospace di sistema sottile e spaziato */
   font-variant-numeric: tabular-nums;
@@ -1577,7 +1577,7 @@ td.entry-actions-cell {
   #rows-body td[data-label="Prezzo"],
   #rows-body .price-table-cell { display: contents; }
   #rows-body .price-value { grid-area: pval; }
-  #rows-body .price-unit { grid-area: punit; }
+  #rows-body .price-unit { grid-area: punit; margin-left: -0.4rem; } /* annulla il column-gap: "3,49€/kg" */
   #rows-body .price-per-unit { grid-area: ppu; }
   #rows-body td[data-label="Prodotto"],
   #rows-body .price-value,
