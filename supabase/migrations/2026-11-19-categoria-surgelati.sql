@@ -1,3 +1,5 @@
+-- approvato da Andrea
+-- (in chat il 19/11/2026: "ok Surgelati")
 -- Categoria "Surgelati" di Andrea (id 55), creata dal telefono scrivendo "❄️ Surgelati".
 -- "❄️" sono due caratteri (❄ + U+FE0F): il sito metteva nell'icona solo il primo e lasciava U+FE0F,
 -- invisibile, davanti al nome ("️ Surgelati"), che cosi' finiva in cima a ogni elenco.
