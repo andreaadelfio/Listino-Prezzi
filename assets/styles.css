@@ -1501,6 +1501,12 @@ td.entry-actions-cell {
     right: 0;
   }
 
+  /* Larghezza fissa: largo quanto il contenuto (e il campo cresce con il testo scritto) il menu della
+     categoria, ancorato a destra, usciva dallo schermo a sinistra con "Nessuna categoria …" */
+  .entry-row .custom-dropdown-panel {
+    width: min(17rem, calc(100vw - 2rem));
+  }
+
   /* Righe prodotto a due linee: nome e prezzo, sotto Store e categoria; casella a destra per il pollice */
   #rows-body tr[data-product] {
     display: grid;
